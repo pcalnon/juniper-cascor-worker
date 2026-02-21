@@ -19,8 +19,16 @@ def main() -> None:
     parser.add_argument("--manager-port", type=int, default=50000, help="Manager port (default: 50000)")
     parser.add_argument("--authkey", default="juniper", help="Authentication key (default: juniper)")
     parser.add_argument("--workers", type=int, default=1, help="Number of worker processes (default: 1)")
-    parser.add_argument("--mp-context", default="forkserver", choices=["forkserver", "spawn", "fork"], help="Multiprocessing context (default: forkserver)")
-    parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Log level (default: INFO)")
+    parser.add_argument(
+        "--mp-context", default="forkserver",
+        choices=["forkserver", "spawn", "fork"],
+        help="Multiprocessing context (default: forkserver)",
+    )
+    parser.add_argument(
+        "--log-level", default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Log level (default: INFO)",
+    )
     parser.add_argument("--cascor-path", help="Path to CasCor src directory (added to sys.path)")
 
     args = parser.parse_args()
