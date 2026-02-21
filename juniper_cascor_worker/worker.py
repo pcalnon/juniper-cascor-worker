@@ -6,7 +6,8 @@ training tasks from the shared task queue.
 
 import logging
 import multiprocessing as mp
-from typing import Any, Optional
+from multiprocessing.context import BaseContext
+from typing import Any, Optional, Union
 
 from juniper_cascor_worker.config import WorkerConfig
 from juniper_cascor_worker.exceptions import WorkerConnectionError, WorkerError
@@ -35,7 +36,7 @@ class CandidateTrainingWorker:
     def __init__(self, config: Optional[WorkerConfig] = None) -> None:
         self.config = config or WorkerConfig()
         self.config.validate()
-        self.ctx = mp.get_context(self.config.mp_context)
+        self.ctx: BaseContext = mp.get_context(self.config.mp_context)
         self.manager: Any = None
         self.task_queue: Any = None
         self.result_queue: Any = None
@@ -53,9 +54,8 @@ class CandidateTrainingWorker:
                 f"Original error: {e}"
             ) from e
 
-        authkey = self.config.authkey
-        if isinstance(authkey, str):
-            authkey = authkey.encode("utf-8")
+        raw_authkey: Union[str, bytes] = self.config.authkey
+        authkey: bytes = raw_authkey.encode("utf-8") if isinstance(raw_authkey, str) else raw_authkey
 
         try:
             self.manager = CandidateTrainingManager(
@@ -87,7 +87,7 @@ class CandidateTrainingWorker:
             raise WorkerError(f"CasCor codebase not found: {e}") from e
 
         for i in range(n):
-            worker = self.ctx.Process(
+            worker = self.ctx.Process(  # type: ignore[attr-defined]
                 target=CascadeCorrelationNetwork._worker_loop,
                 args=(self.task_queue, self.result_queue, True),
                 daemon=True,
