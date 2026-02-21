@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "juniper-cascor-worker"
+version = "0.1.0"
+description = "Remote candidate training worker for the JuniperCascor neural network service"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Paul Calnon" }]
+requires-python = ">=3.11"
+keywords = ["juniper", "cascade-correlation", "neural-network", "distributed-training"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "numpy>=1.24.0",
+    "torch>=2.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-timeout>=2.2.0",
+]
+dev = [
+    "juniper-cascor-worker[test]",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+    "flake8>=7.0.0",
+]
+
+[project.scripts]
+juniper-cascor-worker = "juniper_cascor_worker.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/pcalnon/juniper-cascor-worker"
+Repository = "https://github.com/pcalnon/juniper-cascor-worker"
+Issues = "https://github.com/pcalnon/juniper-cascor-worker/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["juniper_cascor_worker*"]
+
+[tool.setuptools.package-data]
+juniper_cascor_worker = ["py.typed"]
+
+[tool.black]
+line-length = 120
+target-version = ["py311", "py312", "py313", "py314"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+known_first_party = ["juniper_cascor_worker"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = ["-ra", "-q", "--strict-markers"]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests requiring live manager",
+]
+timeout = 30
+
+[tool.coverage.run]
+source = ["juniper_cascor_worker"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
