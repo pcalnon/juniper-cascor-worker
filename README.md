@@ -64,6 +64,16 @@ with CandidateTrainingWorker(config) as worker:
 | `CASCOR_NUM_WORKERS` | Worker count | 1 |
 | `CASCOR_MP_CONTEXT` | Multiprocessing method | forkserver |
 
+## Juniper Ecosystem
+
+This package is part of the Juniper Cascade Correlation Neural Network Research Platform.
+
+| Package | Description | Install |
+|---------|-------------|---------|
+| [juniper-data-client](https://github.com/pcalnon/juniper-data-client) | Dataset service client | `pip install juniper-data-client` |
+| [juniper-cascor-client](https://github.com/pcalnon/juniper-cascor-client) | Neural network service client | `pip install juniper-cascor-client` |
+| [juniper-cascor-worker](https://github.com/pcalnon/juniper-cascor-worker) | Distributed training worker (this package) | `pip install juniper-cascor-worker` |
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
