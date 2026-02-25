@@ -7,6 +7,15 @@ Remote candidate training worker for the JuniperCascor cascade correlation neura
 This package enables distributed candidate training by connecting to a CasCor
 CandidateTrainingManager and processing training tasks on remote hardware.
 
+## Ecosystem Compatibility
+
+This package is part of the [Juniper](https://github.com/pcalnon/juniper-ml) ecosystem.
+Compatible with:
+
+| juniper-data | juniper-cascor | juniper-canopy |
+|---|---|---|
+| 0.4.x | 0.3.x | 0.2.x |
+
 ## Installation
 
 ```bash
