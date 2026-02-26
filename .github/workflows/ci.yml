@@ -92,3 +92,21 @@ jobs:
             conf/conda_environment_ci.yaml
             conf/conda_environment_ci_*.yaml
           retention-days: 90
+
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # Notify Downstream: Trigger CI in dependent service repos (main push only)
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  notify-downstream:
+    name: Notify Downstream Repos
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [test]
+
+    steps:
+      - name: Dispatch to juniper-cascor
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.CROSS_REPO_DISPATCH_TOKEN }}" \
+            https://api.github.com/repos/pcalnon/juniper-cascor/dispatches \
+            -d '{"event_type":"cascor-worker-updated","client_payload":{"source":"juniper-cascor-worker","sha":"${{ github.sha }}"}}'
