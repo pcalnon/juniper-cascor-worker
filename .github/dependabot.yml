@@ -1,0 +1,51 @@
+#####################################################################################################################################################################################################
+# Project:       Juniper
+# Sub-Project:   juniper-cascor-worker
+# File Name:     dependabot.yml
+# Author:        Paul Calnon
+#
+# Date Created:  2026-02-26
+# Last Modified: 2026-02-26
+#
+# License:       MIT License
+# Copyright:     Copyright (c) 2024-2026 Paul Calnon
+#
+# Description:
+#    Dependabot configuration for automated dependency and CI action updates
+#####################################################################################################################################################################################################
+
+version: 2
+
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "security"
+    commit-message:
+      prefix: "deps"
+    groups:
+      python-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
