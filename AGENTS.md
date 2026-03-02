@@ -38,11 +38,11 @@ juniper-cascor-worker --host <manager-host> --port <manager-port>
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `CASCOR_MANAGER_HOST` | Manager hostname | `localhost` |
+| `CASCOR_MANAGER_HOST` | Manager hostname | `127.0.0.1` |
 | `CASCOR_MANAGER_PORT` | Manager port | `50000` |
-| `CASCOR_AUTHKEY` | Authentication key | `juniper-cascor` |
-| `CASCOR_NUM_WORKERS` | Number of worker processes | CPU count |
-| `CASCOR_MP_CONTEXT` | Multiprocessing context | `spawn` |
+| `CASCOR_AUTHKEY` | Authentication key | `juniper` |
+| `CASCOR_NUM_WORKERS` | Number of worker processes | `1` |
+| `CASCOR_MP_CONTEXT` | Multiprocessing context | `forkserver` |
 
 ### Key Files
 
