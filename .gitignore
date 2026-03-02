@@ -9,6 +9,7 @@ htmlcov/
 .mypy_cache/
 .pytest_cache/
 .env
+.env.secrets
 .env.local
 .env.development
 .env.production
