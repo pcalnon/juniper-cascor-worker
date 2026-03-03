@@ -22,7 +22,7 @@ class WorkerConfig:
 
     manager_host: str = "127.0.0.1"
     manager_port: int = 50000
-    authkey: str = "juniper"
+    authkey: str = ""
     num_workers: int = 1
     task_queue_timeout: float = 5.0
     stop_timeout: int = 10
@@ -35,20 +35,22 @@ class WorkerConfig:
         Environment variables:
             CASCOR_MANAGER_HOST: Manager hostname (default: 127.0.0.1)
             CASCOR_MANAGER_PORT: Manager port (default: 50000)
-            CASCOR_AUTHKEY: Authentication key (default: juniper)
+            CASCOR_AUTHKEY: Authentication key (required)
             CASCOR_NUM_WORKERS: Number of workers (default: 1)
             CASCOR_MP_CONTEXT: Multiprocessing context (default: forkserver)
         """
         return cls(
             manager_host=os.getenv("CASCOR_MANAGER_HOST", "127.0.0.1"),
             manager_port=int(os.getenv("CASCOR_MANAGER_PORT", "50000")),
-            authkey=os.getenv("CASCOR_AUTHKEY", "juniper"),
+            authkey=os.getenv("CASCOR_AUTHKEY", ""),
             num_workers=int(os.getenv("CASCOR_NUM_WORKERS", "1")),
             mp_context=os.getenv("CASCOR_MP_CONTEXT", "forkserver"),
         )
 
     def validate(self) -> None:
         """Validate configuration values."""
+        if not self.authkey:
+            raise WorkerConfigError("authkey is required — set CASCOR_AUTHKEY or pass --authkey")
         if self.num_workers < 1:
             raise WorkerConfigError(f"num_workers must be >= 1, got {self.num_workers}")
         if self.manager_port < 1 or self.manager_port > 65535:
