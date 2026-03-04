@@ -11,42 +11,46 @@ from juniper_cascor_worker.worker import CandidateTrainingWorker
 
 
 class TestWorkerInit:
-    def test_default_config(self):
-        worker = CandidateTrainingWorker()
+    def test_default_config_requires_authkey(self):
+        with pytest.raises(Exception, match="authkey"):
+            CandidateTrainingWorker()
+
+    def test_valid_config(self, valid_config):
+        worker = CandidateTrainingWorker(valid_config)
         assert worker.config.manager_host == "127.0.0.1"
         assert worker._connected is False
         assert worker.workers == []
 
     def test_custom_config(self):
-        config = WorkerConfig(manager_host="10.0.0.1", num_workers=4)
+        config = WorkerConfig(manager_host="10.0.0.1", num_workers=4, authkey="test-key")
         worker = CandidateTrainingWorker(config)
         assert worker.config.manager_host == "10.0.0.1"
         assert worker.config.num_workers == 4
 
     def test_invalid_config_raises(self):
-        config = WorkerConfig(num_workers=0)
+        config = WorkerConfig(authkey="test-key", num_workers=0)
         with pytest.raises(Exception):
             CandidateTrainingWorker(config)
 
 
 class TestWorkerState:
-    def test_is_running_false_when_no_workers(self):
-        worker = CandidateTrainingWorker()
+    def test_is_running_false_when_no_workers(self, valid_config):
+        worker = CandidateTrainingWorker(valid_config)
         assert worker.is_running is False
 
-    def test_worker_count_zero_when_no_workers(self):
-        worker = CandidateTrainingWorker()
+    def test_worker_count_zero_when_no_workers(self, valid_config):
+        worker = CandidateTrainingWorker(valid_config)
         assert worker.worker_count == 0
 
-    def test_is_running_with_alive_worker(self):
-        worker = CandidateTrainingWorker()
+    def test_is_running_with_alive_worker(self, valid_config):
+        worker = CandidateTrainingWorker(valid_config)
         mock_process = MagicMock()
         mock_process.is_alive.return_value = True
         worker.workers = [mock_process]
         assert worker.is_running is True
 
-    def test_worker_count_with_mixed(self):
-        worker = CandidateTrainingWorker()
+    def test_worker_count_with_mixed(self, valid_config):
+        worker = CandidateTrainingWorker(valid_config)
         alive = MagicMock()
         alive.is_alive.return_value = True
         dead = MagicMock()
@@ -56,8 +60,8 @@ class TestWorkerState:
 
 
 class TestWorkerConnect:
-    def test_connect_without_cascor_raises(self):
-        worker = CandidateTrainingWorker()
+    def test_connect_without_cascor_raises(self, valid_config):
+        worker = CandidateTrainingWorker(valid_config)
         # CasCor is not importable in this test context
         with pytest.raises(WorkerError, match="CasCor codebase not found"):
             worker.connect()
@@ -114,7 +118,7 @@ class TestWorkerConnect:
             authkey=b"rawbytes",
         )
 
-    def test_connect_manager_failure_raises_connection_error(self):
+    def test_connect_manager_failure_raises_connection_error(self, valid_config):
         """Test connect() raises WorkerConnectionError when manager.connect() fails."""
         mock_manager_instance = MagicMock()
         mock_manager_instance.connect.side_effect = ConnectionRefusedError("Connection refused")
@@ -123,14 +127,14 @@ class TestWorkerConnect:
         mock_module = MagicMock()
         mock_module.CandidateTrainingManager = mock_manager_cls
 
-        worker = CandidateTrainingWorker()
+        worker = CandidateTrainingWorker(valid_config)
 
         with patch.dict(sys.modules, {"cascade_correlation.cascade_correlation": mock_module}):
             with pytest.raises(WorkerConnectionError, match="Failed to connect"):
                 worker.connect()
 
-    def test_start_without_connect_raises(self):
-        worker = CandidateTrainingWorker()
+    def test_start_without_connect_raises(self, valid_config):
+        worker = CandidateTrainingWorker(valid_config)
         with pytest.raises(WorkerError, match="Not connected"):
             worker.start()
 
@@ -142,7 +146,7 @@ class TestWorkerConnect:
         mock_module = MagicMock()
         mock_module.CascadeCorrelationNetwork = mock_network_cls
 
-        worker = CandidateTrainingWorker(WorkerConfig(num_workers=3))
+        worker = CandidateTrainingWorker(WorkerConfig(num_workers=3, authkey="test-key"))
         worker._connected = True
         worker.task_queue = MagicMock()
         worker.result_queue = MagicMock()
@@ -167,7 +171,7 @@ class TestWorkerConnect:
         mock_module = MagicMock()
         mock_module.CascadeCorrelationNetwork = mock_network_cls
 
-        worker = CandidateTrainingWorker(WorkerConfig(num_workers=1))
+        worker = CandidateTrainingWorker(WorkerConfig(num_workers=1, authkey="test-key"))
         worker._connected = True
         worker.task_queue = MagicMock()
         worker.result_queue = MagicMock()
@@ -183,9 +187,9 @@ class TestWorkerConnect:
         assert mock_ctx.Process.call_count == 5
         assert len(worker.workers) == 5
 
-    def test_start_without_cascor_raises(self):
+    def test_start_without_cascor_raises(self, valid_config):
         """Test start() raises WorkerError when CasCor is not importable."""
-        worker = CandidateTrainingWorker()
+        worker = CandidateTrainingWorker(valid_config)
         worker._connected = True
 
         with pytest.raises(WorkerError, match="CasCor codebase not found"):
@@ -193,12 +197,12 @@ class TestWorkerConnect:
 
 
 class TestWorkerStop:
-    def test_stop_no_workers(self):
-        worker = CandidateTrainingWorker()
+    def test_stop_no_workers(self, valid_config):
+        worker = CandidateTrainingWorker(valid_config)
         worker.stop()  # Should not raise
 
-    def test_stop_sends_sentinels(self):
-        worker = CandidateTrainingWorker()
+    def test_stop_sends_sentinels(self, valid_config):
+        worker = CandidateTrainingWorker(valid_config)
         worker._connected = True
         mock_queue = MagicMock()
         worker.task_queue = mock_queue
@@ -211,8 +215,8 @@ class TestWorkerStop:
         assert mock_queue.put.call_count == 2
         assert worker.workers == []
 
-    def test_stop_terminates_unresponsive(self):
-        worker = CandidateTrainingWorker()
+    def test_stop_terminates_unresponsive(self, valid_config):
+        worker = CandidateTrainingWorker(valid_config)
         worker._connected = True
         mock_queue = MagicMock()
         worker.task_queue = mock_queue
@@ -224,9 +228,9 @@ class TestWorkerStop:
         worker.stop(timeout=1)
         mock_process.terminate.assert_called_once()
 
-    def test_stop_sentinel_send_failure(self):
+    def test_stop_sentinel_send_failure(self, valid_config):
         """Test stop() handles exception when sending sentinel to queue (lines 116-117)."""
-        worker = CandidateTrainingWorker()
+        worker = CandidateTrainingWorker(valid_config)
         worker._connected = True
         mock_queue = MagicMock()
         mock_queue.put.side_effect = OSError("Broken pipe")
@@ -243,8 +247,8 @@ class TestWorkerStop:
 
 
 class TestWorkerDisconnect:
-    def test_disconnect_clears_state(self):
-        worker = CandidateTrainingWorker()
+    def test_disconnect_clears_state(self, valid_config):
+        worker = CandidateTrainingWorker(valid_config)
         worker._connected = True
         worker.manager = MagicMock()
         worker.task_queue = MagicMock()
@@ -256,8 +260,8 @@ class TestWorkerDisconnect:
         assert worker.result_queue is None
         assert worker._connected is False
 
-    def test_disconnect_stops_workers_first(self):
-        worker = CandidateTrainingWorker()
+    def test_disconnect_stops_workers_first(self, valid_config):
+        worker = CandidateTrainingWorker(valid_config)
         worker._connected = True
         worker.task_queue = MagicMock()
 
@@ -272,17 +276,17 @@ class TestWorkerDisconnect:
 class TestWorkerContextManager:
     """Tests for __enter__ and __exit__ context manager protocol (lines 149-154)."""
 
-    def test_enter_calls_connect(self):
+    def test_enter_calls_connect(self, valid_config):
         """Test __enter__ calls connect() and returns self (lines 150-151)."""
-        worker = CandidateTrainingWorker()
+        worker = CandidateTrainingWorker(valid_config)
         with patch.object(worker, "connect") as mock_connect:
             result = worker.__enter__()
         mock_connect.assert_called_once()
         assert result is worker
 
-    def test_exit_calls_disconnect(self):
+    def test_exit_calls_disconnect(self, valid_config):
         """Test __exit__ calls disconnect() (line 154)."""
-        worker = CandidateTrainingWorker()
+        worker = CandidateTrainingWorker(valid_config)
         with patch.object(worker, "disconnect") as mock_disconnect:
             worker.__exit__(None, None, None)
         mock_disconnect.assert_called_once()
@@ -297,17 +301,18 @@ class TestWorkerContextManager:
         mock_module = MagicMock()
         mock_module.CandidateTrainingManager = mock_manager_cls
 
+        config = WorkerConfig(authkey="test-key")
         with patch.dict(sys.modules, {"cascade_correlation.cascade_correlation": mock_module}):
-            with CandidateTrainingWorker() as w:
+            with CandidateTrainingWorker(config) as w:
                 assert w._connected is True
                 assert w.manager is mock_manager_instance
             # After exiting context, state should be cleared
             assert w._connected is False
             assert w.manager is None
 
-    def test_exit_with_exception(self):
+    def test_exit_with_exception(self, valid_config):
         """Test __exit__ still calls disconnect when exception occurred."""
-        worker = CandidateTrainingWorker()
+        worker = CandidateTrainingWorker(valid_config)
         with patch.object(worker, "disconnect") as mock_disconnect:
             worker.__exit__(ValueError, ValueError("test"), None)
         mock_disconnect.assert_called_once()
