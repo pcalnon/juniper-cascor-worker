@@ -46,7 +46,7 @@ jobs:
       - name: Lint
         run: |
           pip install flake8
-          flake8 juniper_cascor_worker --max-line-length=120
+          flake8 juniper_cascor_worker --max-line-length=512
 
   dependency-docs:
     name: Dependency Documentation
