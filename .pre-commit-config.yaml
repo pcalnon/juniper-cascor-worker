@@ -1,0 +1,255 @@
+#####################################################################################################################################################################################################
+# Project:       Juniper
+# Sub-Project:   juniper-cascor-worker
+# Application:   juniper_cascor_worker
+# File Name:     .pre-commit-config.yaml
+# Author:        Paul Calnon
+# Version:       0.1.0
+#
+# Date Created:  2026-03-11
+# Last Modified: 2026-03-11
+#
+# License:       MIT License
+# Copyright:     Copyright (c) 2024-2026 Paul Calnon
+#
+# Description:
+#    Pre-commit hooks configuration for juniper-cascor-worker
+#    Runs code quality checks locally before commit and in CI
+#
+# Setup:
+#    pip install pre-commit
+#    pre-commit install
+#    pre-commit run --all-files
+#
+# References:
+#    - https://pre-commit.com/
+#####################################################################################################################################################################################################
+
+# Minimum pre-commit version required
+minimum_pre_commit_version: "3.0.0"
+
+# Default settings for all hooks
+default_language_version:
+  python: python3
+
+# Exclude patterns (files/directories to skip)
+exclude: |
+  (?x)^(
+      \.git/|
+      \.venv/|
+      venv/|
+      __pycache__/|
+      \.pytest_cache/|
+      \.mypy_cache/|
+      data/|
+      prompts/|
+      reports/|
+      resources/|
+      logs/|
+      images/|
+      .*\.egg-info/|
+      .*\.ipynb_checkpoints/.*|
+      .*/backups/.*|
+      .*-ORIG\.py$|
+      .*\.bak$|
+      .*\.orig$|
+      .*~$
+  )$
+
+repos:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # General file checks
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+        name: Check YAML syntax
+      - id: check-toml
+        name: Check TOML syntax
+      - id: check-json
+        name: Check JSON syntax
+      - id: end-of-file-fixer
+        name: Fix end of files
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+      - id: check-added-large-files
+        name: Check for large files
+        args: [--maxkb=1000]
+      - id: check-case-conflict
+        name: Check case conflicts
+      - id: check-ast
+        name: Check Python AST
+      - id: debug-statements
+        name: Check for debug statements
+      - id: detect-private-key
+        name: Detect private keys
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Python Code Formatting - Black
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        name: Format with Black
+        args:
+          - --line-length=512
+        files: ^(juniper_cascor_worker|tests)/
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Python Import Sorting - isort
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: Sort imports with isort
+        args:
+          - --profile=black
+          - --line-length=512
+        files: ^(juniper_cascor_worker|tests)/
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Python Linting - Flake8 (Source Code)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8
+        name: Lint source with Flake8
+        args:
+          - --max-line-length=512
+          - --extend-ignore=E203,E265,E266,E501,W503,E402,E226,C409,B008,B904,B905,B907
+          - --max-complexity=15
+          - --select=B,C,E,F,W,T4,B9
+        additional_dependencies:
+          - flake8-bugbear>=24.0.0
+          - flake8-comprehensions>=3.14.0
+          - flake8-simplify>=0.21.0
+        files: ^juniper_cascor_worker/
+        exclude: ^tests/
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Python Linting - Flake8 (Tests - Relaxed Rules)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8
+        name: Lint tests with Flake8 (relaxed)
+        args:
+          - --max-line-length=512
+          - --extend-ignore=E203,E265,E266,E501,W503,E722,E402,E226,C409,C901,B008,B904,B905,B907,F401,F811,F841
+          - --max-complexity=25
+          - --select=B,C,E,F,W,T4,B9
+        additional_dependencies:
+          - flake8-bugbear>=24.0.0
+          - flake8-comprehensions>=3.14.0
+          - flake8-simplify>=0.21.0
+        files: ^tests/
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Python Type Checking - MyPy
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        name: Type check with MyPy
+        args:
+          - --ignore-missing-imports
+          - --no-strict-optional
+          - --python-version=3.11
+        files: ^juniper_cascor_worker/.*\.py$
+        additional_dependencies: []
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Security Scanning - Bandit (Source Code)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+        name: Security scan source with Bandit
+        args:
+          - -q
+          - --skip=B101,B311
+          # B101: assert_used (common in tests)
+          # B311: random (not used for security)
+        files: ^juniper_cascor_worker/.*\.py$
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Security Scanning - Bandit (Tests - Relaxed Rules)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+        name: Security scan tests with Bandit (relaxed)
+        args:
+          - -q
+          - --skip=B101,B104,B108,B110,B311
+          # B101: assert_used (tests use assertions extensively)
+          # B104: hardcoded_bind_all_interfaces (test fixtures)
+          # B108: hardcoded_tmp_directory (tests use /tmp paths)
+          # B110: try_except_pass (common test patterns)
+          # B311: random (not used for security in tests)
+        files: ^tests/.*\.py$
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Markdown Linting
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.42.0
+    hooks:
+      - id: markdownlint
+        name: Lint Markdown files
+        args:
+          - --config=./.markdownlint.yaml
+          - --fix
+        files: \.(md|markdown)$
+        exclude: ^(CHANGELOG\.md|notes/|docs/)
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Shell Script Linting - shellcheck
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        name: Lint shell scripts
+        args:
+          - --severity=warning
+        files: \.(sh|bash)$
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # YAML Linting - yamllint
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        name: Lint YAML files
+        args: [--format, parsable, -d, relaxed]
+        types: [yaml]
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # SOPS: Block unencrypted .env files from being committed
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: local
+    hooks:
+      - id: no-unencrypted-env
+        name: Block unencrypted .env files
+        entry: 'bash -c "echo ERROR: Unencrypted .env file detected. Use sops to encrypt. && exit 1"'
+        language: system
+        files: '^\.env(\.secrets)?$'
+        types: [file]
+
+# CI configuration (for pre-commit.ci service, if used)
+ci:
+  autofix_prs: false
+  autoupdate_schedule: monthly

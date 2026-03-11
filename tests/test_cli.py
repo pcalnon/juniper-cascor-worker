@@ -87,9 +87,7 @@ class TestCLIMain:
         mock_worker_cls.return_value = mock_worker
 
         with patch("juniper_cascor_worker.cli.WorkerConfig") as mock_config_cls:
-            mock_config_cls.return_value = MagicMock(
-                num_workers=8, manager_host="10.0.0.5", manager_port=9999
-            )
+            mock_config_cls.return_value = MagicMock(num_workers=8, manager_host="10.0.0.5", manager_port=9999)
             main()
             mock_config_cls.assert_called_once_with(
                 manager_host="10.0.0.5",
