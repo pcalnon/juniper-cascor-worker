@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import os
 import signal
 import sys
 
@@ -17,7 +18,7 @@ def main() -> None:
     )
     parser.add_argument("--manager-host", default="127.0.0.1", help="Manager hostname (default: 127.0.0.1)")
     parser.add_argument("--manager-port", type=int, default=50000, help="Manager port (default: 50000)")
-    parser.add_argument("--authkey", default="juniper", help="Authentication key (default: juniper)")
+    parser.add_argument("--authkey", default=None, help="Authentication key (required if CASCOR_AUTHKEY not set)")
     parser.add_argument("--workers", type=int, default=1, help="Number of worker processes (default: 1)")
     parser.add_argument(
         "--mp-context",
@@ -43,13 +44,17 @@ def main() -> None:
     if args.cascor_path:
         sys.path.insert(0, args.cascor_path)
 
+    # Resolve authkey: CLI arg > env var > fail at validation
+    authkey = args.authkey or os.environ.get("CASCOR_AUTHKEY", "")
+
     config = WorkerConfig(
         manager_host=args.manager_host,
         manager_port=args.manager_port,
-        authkey=args.authkey,
+        authkey=authkey,
         num_workers=args.workers,
         mp_context=args.mp_context,
     )
+    config.validate()
 
     shutdown_requested = False
 

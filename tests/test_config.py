@@ -14,7 +14,7 @@ class TestWorkerConfig:
         config = WorkerConfig()
         assert config.manager_host == "127.0.0.1"
         assert config.manager_port == 50000
-        assert config.authkey == "juniper"
+        assert config.authkey == ""
         assert config.num_workers == 1
         assert config.mp_context == "forkserver"
 
@@ -34,26 +34,31 @@ class TestWorkerConfig:
         assert config.address == ("10.0.0.1", 5555)
 
     def test_validate_valid(self):
-        config = WorkerConfig()
+        config = WorkerConfig(authkey="test-key")
         config.validate()  # Should not raise
 
+    def test_validate_missing_authkey(self):
+        config = WorkerConfig()
+        with pytest.raises(WorkerConfigError, match="authkey"):
+            config.validate()
+
     def test_validate_invalid_workers(self):
-        config = WorkerConfig(num_workers=0)
+        config = WorkerConfig(authkey="test-key", num_workers=0)
         with pytest.raises(WorkerConfigError, match="num_workers"):
             config.validate()
 
     def test_validate_invalid_port_low(self):
-        config = WorkerConfig(manager_port=0)
+        config = WorkerConfig(authkey="test-key", manager_port=0)
         with pytest.raises(WorkerConfigError, match="manager_port"):
             config.validate()
 
     def test_validate_invalid_port_high(self):
-        config = WorkerConfig(manager_port=70000)
+        config = WorkerConfig(authkey="test-key", manager_port=70000)
         with pytest.raises(WorkerConfigError, match="manager_port"):
             config.validate()
 
     def test_validate_invalid_context(self):
-        config = WorkerConfig(mp_context="invalid")
+        config = WorkerConfig(authkey="test-key", mp_context="invalid")
         with pytest.raises(WorkerConfigError, match="mp_context"):
             config.validate()
 
