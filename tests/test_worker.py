@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from juniper_cascor_worker.config import WorkerConfig
-from juniper_cascor_worker.exceptions import WorkerConnectionError, WorkerError
+from juniper_cascor_worker.exceptions import WorkerConfigError, WorkerConnectionError, WorkerError
 from juniper_cascor_worker.worker import CandidateTrainingWorker
 
 
@@ -28,8 +28,10 @@ class TestWorkerInit:
         assert worker.config.num_workers == 4
 
     def test_invalid_config_raises(self):
+        # config = WorkerConfig(num_workers=0)
         config = WorkerConfig(authkey="test-key", num_workers=0)
-        with pytest.raises(Exception):
+        # with pytest.raises(Exception):
+        with pytest.raises(WorkerConfigError):
             CandidateTrainingWorker(config)
 
 

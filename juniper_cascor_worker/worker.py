@@ -48,11 +48,7 @@ class CandidateTrainingWorker:
         try:
             from cascade_correlation.cascade_correlation import CandidateTrainingManager
         except ImportError as e:
-            raise WorkerError(
-                "CasCor codebase not found. Ensure the JuniperCascor src directory "
-                "is on sys.path or installed in the environment. "
-                f"Original error: {e}"
-            ) from e
+            raise WorkerError("CasCor codebase not found. Ensure the JuniperCascor src directory " "is on sys.path or installed in the environment. " f"Original error: {e}") from e
 
         raw_authkey: Union[str, bytes] = self.config.authkey
         authkey: bytes = raw_authkey.encode("utf-8") if isinstance(raw_authkey, str) else raw_authkey

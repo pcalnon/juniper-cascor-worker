@@ -61,12 +61,12 @@ include = ["juniper_cascor_worker*"]
 juniper_cascor_worker = ["py.typed"]
 
 [tool.black]
-line-length = 120
-target-version = ["py311", "py312", "py313", "py314"]
+line-length = 512
+target-version = ["py311", "py312", "py313"]
 
 [tool.isort]
 profile = "black"
-line_length = 120
+line_length = 512
 known_first_party = ["juniper_cascor_worker"]
 
 [tool.pytest.ini_options]
@@ -82,8 +82,28 @@ timeout = 30
 
 [tool.coverage.run]
 source = ["juniper_cascor_worker"]
+source_pkgs = ["juniper_cascor_worker"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/data/*",
+    "*/logs/*",
+    # "*/__main__.py",
+    # "*/api/*",
+]
 branch = true
 
 [tool.coverage.report]
 fail_under = 80
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "^\\s*pass\\s*$",
+]
 show_missing = true
+precision = 2

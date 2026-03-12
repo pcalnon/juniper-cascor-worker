@@ -1,66 +1,260 @@
-name: CI
+---
+#####################################################################################################################################################################################################
+# Project:       Juniper
+# Sub-Project:   juniper-cascor-worker
+# Application:   juniper_cascor_worker
+# File Name:     ci.yml
+# Author:        Paul Calnon
+# Version:       0.2.0
+#
+# Date Created:  2026-02-22
+# Last Modified: 2026-03-11
+#
+# License:       MIT License
+# Copyright:     Copyright (c) 2024-2026 Paul Calnon
+#
+# Description:
+#    GitHub Actions CI/CD Pipeline for juniper-cascor-worker
+#    - Pre-commit hooks for code quality (black, isort, flake8, mypy, bandit, shellcheck, yamllint)
+#    - Unit tests with coverage enforcement
+#    - Security scanning (Gitleaks, Bandit SARIF, pip-audit)
+#    - Build/package verification
+#    - Dependency documentation generation
+#    - Quality gate aggregator
+#
+# References:
+#    - Modeled after juniper-cascor CI pipeline
+#####################################################################################################################################################################################################
+
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - develop
+      - feature/**
+      - fix/**
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - develop
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_TEST_VERSION: "3.13"
+  COVERAGE_FAIL_UNDER: "80"
+
 jobs:
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # Pre-commit: Code Quality Checks (runs across multiple Python versions)
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  pre-commit:
+    name: Pre-commit (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install pre-commit
+        run: |
+          python -m pip install --upgrade pip
+          pip install pre-commit
+
+      - name: Cache pre-commit hooks
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684  # v4.2.3
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-${{ matrix.python-version }}-
+
+      - name: Run pre-commit hooks
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       juniper-cascor-worker - Pre-commit Checks           ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          pre-commit run --all-files --show-diff-on-failure
+
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # Docs: Validate documentation link integrity
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
   docs:
     name: Documentation Links
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: "3.12"
-      - name: Validate Documentation Links
-        run: python scripts/check_doc_links.py --exclude templates --exclude history
 
-  test:
+      - name: Validate Documentation Links
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       juniper-cascor-worker - Documentation Validation     ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          python scripts/check_doc_links.py --exclude templates --exclude history
+
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # Unit Tests: Run unit tests with coverage enforcement
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  unit-tests:
+    name: Unit Tests + Coverage (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    needs: [pre-commit]
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 1
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
 
       - name: Install dependencies
-        run: pip install -e ".[test]"
-
-      - name: Run tests
-        run: pytest tests/ -v --cov=juniper_cascor_worker --cov-report=term-missing
-
-      - name: Type check
         run: |
-          pip install mypy
-          mypy juniper_cascor_worker --ignore-missing-imports
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       juniper-cascor-worker - Install Dependencies         ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          python -m pip install --upgrade pip
+          # Install CPU-only PyTorch first (CI doesn't need CUDA)
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[test]"
 
-      - name: Lint
+      - name: Create required directories
+        run: mkdir -p reports/junit reports/htmlcov
+
+      - name: Run Unit Tests
         run: |
-          pip install flake8
-          flake8 juniper_cascor_worker --max-line-length=120
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       juniper-cascor-worker - Unit Tests                   ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
 
-  dependency-docs:
-    name: Dependency Documentation
+          python -m pytest \
+            tests/ \
+            --verbose \
+            --timeout=60 \
+            --maxfail=5 \
+            --junitxml=reports/junit/junit-unit.xml \
+            --cov=juniper_cascor_worker \
+            --cov-report=term-missing \
+            --cov-report=xml:reports/coverage.xml \
+            --cov-report=html:reports/htmlcov
+
+      - name: Enforce Coverage Gate
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       juniper-cascor-worker - Coverage Gate Enforcement    ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+
+          python -m coverage report --fail-under=${COVERAGE_FAIL_UNDER}
+
+      - name: Upload Coverage Artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        if: always()
+        with:
+          name: coverage-report-py${{ matrix.python-version }}
+          path: |
+            reports/coverage.xml
+            reports/htmlcov/
+          retention-days: 30
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        if: always()
+        with:
+          name: unit-test-results-py${{ matrix.python-version }}
+          path: reports/junit/
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # Build: Build sdist and wheel artifacts
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  build:
+    name: Build Package
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [unit-tests]
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_TEST_VERSION }}
+          cache: pip
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build sdist and wheel
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       juniper-cascor-worker - Build Package                ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          python -m build --sdist --wheel
+
+      - name: Verify build artifacts
+        run: |
+          ls -la dist/
+          test -f dist/*.tar.gz
+          test -f dist/*.whl
+          twine check dist/*
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: build-artifacts
+          path: dist/
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # Dependency Docs: Generate dependency documentation artifacts
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  dependency-docs:
+    name: Dependency Documentation
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Python ${{ env.PYTHON_TEST_VERSION }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_TEST_VERSION }}
           cache: pip
 
       - name: Set up Conda (Miniforge)
@@ -68,22 +262,25 @@ jobs:
         with:
           miniforge-version: latest
           auto-activate-base: true
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_TEST_VERSION }}
 
       - name: Install project dependencies
         shell: bash -l {0}
         run: |
           python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[test]"
 
       - name: Generate Dependency Documentation
         shell: bash -l {0}
         run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       juniper-cascor-worker - Dependency Documentation     ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
           bash scripts/generate_dep_docs.sh
 
       - name: Upload Dependency Documentation
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08  # v4.6.0
-        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
         with:
           name: dependency-docs
           path: |
@@ -94,13 +291,141 @@ jobs:
           retention-days: 90
 
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # Security: Run security scans (Gitleaks, Bandit SARIF, pip-audit)
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  security:
+    name: Security Scans
+    runs-on: ubuntu-latest
+    needs: [pre-commit]
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks (Secrets Detection)
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          fail: true
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit pip-audit
+
+      - name: Create reports directory
+        run: mkdir -p reports/security
+
+      - name: Run Bandit (SAST) -> SARIF
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       juniper-cascor-worker - Bandit Security Scan         ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          bandit -r juniper_cascor_worker -f sarif -o reports/security/bandit.sarif || true
+
+      - name: Upload Bandit SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169  # v3.28.0
+        if: always()
+        with:
+          sarif_file: reports/security/bandit.sarif
+        continue-on-error: true
+
+      - name: Run pip-audit (Dependency Vulnerabilities)
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       juniper-cascor-worker - pip-audit Dependency Scan    ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy
+          pip freeze | grep -ivE "^juniper[-_]cascor[-_]worker" > reports/security/requirements.txt
+          pip-audit -r reports/security/requirements.txt --strict --desc on \
+            || (echo "::error::Critical/High vulnerabilities found in dependencies" && exit 1)
+
+      - name: Upload Security Reports
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        if: always()
+        with:
+          name: security-reports
+          path: reports/security/
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # Required Checks Aggregator: Final quality gate
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  required-checks:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [pre-commit, unit-tests, build, dependency-docs, security, docs]
+
+    steps:
+      - name: Check Quality Gate Status
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       juniper-cascor-worker - Quality Gate Status          ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "Pre-commit:        ${{ needs.pre-commit.result }}"
+          echo "Unit Tests:        ${{ needs.unit-tests.result }}"
+          echo "Build:             ${{ needs.build.result }}"
+          echo "Dependency Docs:   ${{ needs.dependency-docs.result }}"
+          echo "Security:          ${{ needs.security.result }}"
+          echo "Documentation:     ${{ needs.docs.result }}"
+          echo ""
+
+          if [[ "${{ needs.pre-commit.result }}" != "success" ]]; then
+            echo "::error::Pre-commit checks failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.unit-tests.result }}" != "success" ]]; then
+            echo "::error::Unit tests failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.build.result }}" != "success" ]]; then
+            echo "::error::Build failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.dependency-docs.result }}" == "failure" ]]; then
+            echo "::error::Dependency documentation generation failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.security.result }}" == "failure" ]]; then
+            echo "::error::Security scans failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.docs.result }}" != "success" ]]; then
+            echo "::error::Documentation link validation failed"
+            exit 1
+          fi
+
+          echo "::notice::Quality Gate PASSED"
+
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
   # Notify Downstream: Trigger CI in dependent service repos (main push only)
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   notify-downstream:
     name: Notify Downstream Repos
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: [test]
+    needs: [required-checks]
 
     steps:
       - name: Dispatch to juniper-cascor
