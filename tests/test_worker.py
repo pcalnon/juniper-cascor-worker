@@ -64,9 +64,9 @@ class TestWorkerState:
 class TestWorkerConnect:
     def test_connect_without_cascor_raises(self, valid_config):
         worker = CandidateTrainingWorker(valid_config)
-        # CasCor is not importable in this test context
-        with pytest.raises(WorkerError, match="CasCor codebase not found"):
-            worker.connect()
+        with patch.dict(sys.modules, {"cascade_correlation": None, "cascade_correlation.cascade_correlation": None}):
+            with pytest.raises(WorkerError, match="CasCor codebase not found"):
+                worker.connect()
 
     def test_connect_success_with_str_authkey(self):
         """Test connect() success path with string authkey (lines 56-71)."""
@@ -194,8 +194,9 @@ class TestWorkerConnect:
         worker = CandidateTrainingWorker(valid_config)
         worker._connected = True
 
-        with pytest.raises(WorkerError, match="CasCor codebase not found"):
-            worker.start()
+        with patch.dict(sys.modules, {"cascade_correlation": None, "cascade_correlation.cascade_correlation": None}):
+            with pytest.raises(WorkerError, match="CasCor codebase not found"):
+                worker.start()
 
 
 class TestWorkerStop:
