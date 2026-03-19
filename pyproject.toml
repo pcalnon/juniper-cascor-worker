@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "juniper-cascor-worker"
-version = "0.2.0"
+version = "0.3.0"
 description = "Remote candidate training worker for the JuniperCascor neural network service"
 readme = "README.md"
 license = "MIT"
@@ -29,11 +29,13 @@ classifiers = [
 dependencies = [
     "numpy>=1.24.0",
     "torch>=2.0.0",
+    "websockets>=11.0",
 ]
 
 [project.optional-dependencies]
 test = [
     "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
     "pytest-timeout>=2.2.0",
 ]

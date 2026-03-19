@@ -11,9 +11,10 @@ from juniper_cascor_worker.worker import CandidateTrainingWorker
 
 
 class TestWorkerInit:
-    def test_default_config_requires_authkey(self):
-        with pytest.raises(Exception, match="authkey"):
-            CandidateTrainingWorker()
+    def test_default_config_uses_placeholder_authkey(self):
+        """CandidateTrainingWorker() with no args uses a placeholder authkey."""
+        worker = CandidateTrainingWorker()
+        assert worker.config.authkey == "placeholder"
 
     def test_valid_config(self, valid_config):
         worker = CandidateTrainingWorker(valid_config)
