@@ -1,7 +1,7 @@
 # Developer Cheatsheet — juniper-cascor-worker
 
 **Version**: 1.0.0
-**Date**: 2026-03-15
+**Date**: 2026-03-20
 **Project**: juniper-cascor-worker
 
 ---
@@ -27,18 +27,29 @@
 ### Start a Worker
 
 ```bash
-juniper-cascor-worker --manager-host 192.168.1.10 --manager-port 50000 --workers 4
+# Default WebSocket mode
+juniper-cascor-worker --server-url ws://192.168.1.10:8200/ws/v1/workers --auth-token my-worker-token
+
+# Legacy mode (deprecated)
+juniper-cascor-worker --legacy --manager-host 192.168.1.10 --manager-port 50000 --authkey my-legacy-key --workers 4
 ```
 
 ### CLI Options
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--manager-host` | TEXT | `127.0.0.1` | Manager hostname |
-| `--manager-port` | INTEGER | `50000` | Manager port |
-| `--authkey` | TEXT | `juniper` | Authentication key |
-| `--workers` | INTEGER | `1` | Number of worker processes |
-| `--mp-context` | CHOICE | `forkserver` | Multiprocessing context (`forkserver`, `spawn`, `fork`) |
+| `--legacy` | FLAG | `False` | Use deprecated BaseManager path |
+| `--server-url` | TEXT | `None` | WebSocket worker endpoint URL |
+| `--auth-token` | TEXT | `None` | Token sent in `X-API-Key` header |
+| `--heartbeat-interval` | FLOAT | `10.0` | Seconds between heartbeat messages |
+| `--tls-cert` | TEXT | `None` | Client certificate path for mTLS |
+| `--tls-key` | TEXT | `None` | Client key path for mTLS |
+| `--tls-ca` | TEXT | `None` | Custom CA bundle path |
+| `--manager-host` | TEXT | `127.0.0.1` | Legacy manager hostname (`--legacy`) |
+| `--manager-port` | INTEGER | `50000` | Legacy manager port (`--legacy`) |
+| `--authkey` | TEXT | `None` | Legacy auth key (`--legacy`) |
+| `--workers` | INTEGER | `1` | Legacy worker process count (`--legacy`) |
+| `--mp-context` | CHOICE | `forkserver` | Legacy multiprocessing context (`--legacy`) |
 | `--log-level` | CHOICE | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `--cascor-path` | TEXT | -- | Path to CasCor src directory (added to `sys.path`) |
 
@@ -53,41 +64,32 @@ Signal handling: first SIGINT/SIGTERM triggers graceful shutdown; second forces 
 ### WorkerConfig
 
 ```python
-from juniper_cascor_worker import CandidateTrainingWorker, WorkerConfig
+from juniper_cascor_worker import CascorWorkerAgent, WorkerConfig
 
 config = WorkerConfig(
-    manager_host="192.168.1.10",
-    manager_port=50000,
-    authkey="juniper",
-    num_workers=4,
-    mp_context="forkserver",
+    server_url="ws://192.168.1.10:8200/ws/v1/workers",
+    auth_token="my-worker-token",
 )
 
-# Or from environment variables
+# Or from environment variables (CASCOR_*)
 config = WorkerConfig.from_env()
 ```
 
 ### Worker Lifecycle
 
 ```python
-with CandidateTrainingWorker(config) as worker:
-    worker.connect()    # Connect to remote CandidateTrainingManager
-    worker.start()      # Spawn worker processes
-    # Workers train candidate units in parallel
-    # On exit: auto-calls disconnect() -> stop() -> cleanup
+import asyncio
+
+agent = CascorWorkerAgent(config)
+asyncio.run(agent.run())
 ```
 
 ### Lifecycle States
 
 ```
-(init) --> configured --> connected --> running --> connected --> disconnected
-             validate()    connect()     start()     stop()      disconnect()
+(init) --> configured --> connecting --> registered --> processing --> stopped
+             validate()      run()         _register()      loops       stop()
 ```
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `worker.is_running` | `bool` | `True` if any worker process is alive |
-| `worker.worker_count` | `int` | Count of alive worker processes |
 
 > See: [docs/REFERENCE.md](REFERENCE.md#python-api) for full API reference.
 
@@ -97,31 +99,31 @@ with CandidateTrainingWorker(config) as worker:
 
 ### How It Works
 
-1. **juniper-cascor** (manager) starts a `CandidateTrainingManager` on a configured port
-2. **juniper-cascor-worker** connects to the manager via Python `multiprocessing.managers`
-3. Workers pull candidate training tasks from a shared task queue
-4. Each worker trains a candidate unit independently and pushes results back
-5. The manager selects the best candidate and installs it into the network
+1. **juniper-cascor** exposes the `/ws/v1/workers` endpoint
+2. **juniper-cascor-worker** connects via WebSocket, optionally authenticating with `X-API-Key`
+3. The worker receives `task_assign` metadata plus binary tensor frames
+4. The worker executes candidate training locally and sends `task_result` plus output tensors
+5. Heartbeat messages keep liveness and support reconnect behavior
 
 ### Communication Flow
 
 ```
-juniper-cascor (Manager)              juniper-cascor-worker (Remote)
+juniper-cascor (Server)               juniper-cascor-worker (Remote)
 +----------------------------+        +----------------------------+
-| CandidateTrainingManager   |        | CandidateTrainingWorker    |
-|   task_queue (shared)   <--|--------|-->  worker processes (N)   |
-|   result_queue (shared) <--|--------|-->  _worker_loop() each    |
+| /ws/v1/workers endpoint    |        | CascorWorkerAgent          |
+| JSON + binary task frames  |<------>| async message + heartbeat  |
+| X-API-Key auth             |        | local training execution   |
 +----------------------------+        +----------------------------+
-     multiprocessing.managers (TCP, authkey-authenticated)
+       WebSocket (ws:// or wss://)
 ```
 
 ### Multiprocessing Context
 
 | Context | Platform | Notes |
 |---------|----------|-------|
-| `forkserver` | Linux/macOS | Default; safest for most scenarios |
+| `forkserver` | Linux/macOS | Legacy mode default; safest for most scenarios |
 | `spawn` | All | Most portable; slower startup |
-| `fork` | Unix only | Fastest; can deadlock with threads |
+| `fork` | Unix only | Fastest; can deadlock with threads (legacy mode) |
 
 ---
 
@@ -129,13 +131,17 @@ juniper-cascor (Manager)              juniper-cascor-worker (Remote)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `CASCOR_SERVER_URL` | *(required in default mode)* | WebSocket worker endpoint URL |
+| `CASCOR_AUTH_TOKEN` | empty | Token sent in `X-API-Key` header |
+| `CASCOR_HEARTBEAT_INTERVAL` | `10.0` | Heartbeat interval in seconds |
+| `CASCOR_TLS_CERT` | unset | Client certificate path (mTLS) |
+| `CASCOR_TLS_KEY` | unset | Client key path (mTLS) |
+| `CASCOR_TLS_CA` | unset | CA bundle path for TLS verification |
 | `CASCOR_MANAGER_HOST` | `127.0.0.1` | Manager hostname |
 | `CASCOR_MANAGER_PORT` | `50000` | Manager port |
 | `CASCOR_AUTHKEY` | *(required)* | Authentication key. No usable default; worker fails validation if unset. `.env.example` uses `juniper` as a sample value. |
 | `CASCOR_NUM_WORKERS` | `1` | Number of worker processes |
 | `CASCOR_MP_CONTEXT` | `forkserver` | Multiprocessing start method |
-| `CASCOR_TASK_QUEUE_TIMEOUT` | `5.0` | Seconds to wait for a task before re-checking (WorkerConfig field: `task_queue_timeout`) |
-| `CASCOR_STOP_TIMEOUT` | `10` | Seconds to wait for worker processes to exit on stop (WorkerConfig field: `stop_timeout`) |
 
 All variables are read by `WorkerConfig.from_env()`.
 
@@ -145,15 +151,15 @@ All variables are read by `WorkerConfig.from_env()`.
 
 ```
 WorkerError (base)
-+-- WorkerConnectionError    # Connection to manager failed
++-- WorkerConnectionError    # Connection or protocol failures
 +-- WorkerConfigError        # Invalid configuration
 ```
 
 | Exception | Raised When |
 |-----------|-------------|
-| `WorkerConfigError` | Invalid port, num_workers, or mp_context in config |
-| `WorkerConnectionError` | Manager unreachable or authentication failure |
-| `WorkerError` | CasCor source not importable, or `start()` called before `connect()` |
+| `WorkerConfigError` | Invalid WebSocket URL/scheme/heartbeat/backoff or invalid legacy settings |
+| `WorkerConnectionError` | WebSocket connection/reconnect failures, closed socket, or registration problems |
+| `WorkerError` | Legacy `CandidateTrainingWorker` import/connect/start failures |
 
 ---
 
@@ -161,11 +167,12 @@ WorkerError (base)
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `WorkerConnectionError` on `connect()` | Manager not running or wrong host/port | Verify juniper-cascor is running with manager enabled |
-| `WorkerConnectionError` auth failure | Wrong authkey | Match `CASCOR_AUTHKEY` between manager and worker |
-| `WorkerError` on `connect()` | CasCor source not on `sys.path` | Use `--cascor-path` CLI flag to point to CasCor src directory |
-| Workers spawn but exit immediately | Task queue empty | Training must be active on the manager side |
-| `WorkerConfigError` | Invalid port or num_workers | Port must be 1-65535, num_workers must be >= 1 |
+| Authentication fails in default mode | Using old `--api-key` / `CASCOR_API_KEY` names | Use `--auth-token` and `CASCOR_AUTH_TOKEN` |
+| Manager flags appear ignored | Running without `--legacy` | Add `--legacy` to enable BaseManager worker path |
+| `server_url is required` | Missing worker endpoint in default mode | Set `--server-url` or `CASCOR_SERVER_URL` |
+| `WorkerConnectionError` in legacy mode | Manager not running or wrong host/port/authkey | Verify manager settings and `CASCOR_AUTHKEY` match |
+| `WorkerError` in legacy mode | CasCor source not on `sys.path` | Use `--cascor-path` CLI flag or install CasCor source |
+| `WorkerConfigError` in legacy mode | Invalid port or worker count | Port must be 1-65535, workers must be >= 1 |
 
 ---
 

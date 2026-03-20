@@ -4,8 +4,15 @@ Remote candidate training worker for the JuniperCascor cascade correlation neura
 
 ## Overview
 
-This package enables distributed candidate training by connecting to a CasCor
-CandidateTrainingManager and processing training tasks on remote hardware.
+This package enables distributed candidate training on remote hardware.
+
+It supports two worker modes:
+
+- **WebSocket mode (default)**: `CascorWorkerAgent` connects to the
+  `juniper-cascor` `/ws/v1/workers` endpoint and exchanges structured JSON and
+  binary tensor frames.
+- **Legacy mode (`--legacy`)**: `CandidateTrainingWorker` connects to a
+  `CandidateTrainingManager` over `multiprocessing.managers` (deprecated).
 
 ## Ecosystem Compatibility
 
@@ -28,14 +35,23 @@ on the worker machine (the worker runs CasCor's training code locally).
 ## CLI Usage
 
 ```bash
-# Basic usage
-juniper-cascor-worker --manager-host 192.168.1.100 --manager-port 50000 --workers 4
-
-# With CasCor source path
-juniper-cascor-worker --manager-host 192.168.1.100 --cascor-path /opt/juniper-cascor/src --workers 8
-
-# Full options
+# Default mode (WebSocket)
 juniper-cascor-worker \
+    --server-url ws://192.168.1.100:8200/ws/v1/workers \
+    --auth-token my-worker-token
+
+# WebSocket mode with mTLS and custom heartbeat
+juniper-cascor-worker \
+    --server-url wss://cascor.example.com/ws/v1/workers \
+    --auth-token my-worker-token \
+    --heartbeat-interval 15 \
+    --tls-cert /etc/juniper/worker.crt \
+    --tls-key /etc/juniper/worker.key \
+    --tls-ca /etc/juniper/ca.pem
+
+# Legacy mode (deprecated)
+juniper-cascor-worker \
+    --legacy \
     --manager-host 192.168.1.100 \
     --manager-port 50000 \
     --authkey my-secret-key \
@@ -47,31 +63,34 @@ juniper-cascor-worker \
 ## Python API
 
 ```python
-from juniper_cascor_worker import CandidateTrainingWorker, WorkerConfig
+import asyncio
+
+from juniper_cascor_worker import CascorWorkerAgent, WorkerConfig
 
 config = WorkerConfig(
-    manager_host="192.168.1.100",
-    manager_port=50000,
-    authkey="my-secret-key",
-    num_workers=4,
+    server_url="ws://192.168.1.100:8200/ws/v1/workers",
+    auth_token="my-worker-token",
 )
 
-with CandidateTrainingWorker(config) as worker:
-    worker.start()
-    # Workers process tasks from the remote queue
-    input("Press Enter to stop...")
-    worker.stop()
+agent = CascorWorkerAgent(config)
+asyncio.run(agent.run())
 ```
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `CASCOR_MANAGER_HOST` | Manager hostname | 127.0.0.1 |
-| `CASCOR_MANAGER_PORT` | Manager port | 50000 |
-| `CASCOR_AUTHKEY` | Authentication key | juniper |
-| `CASCOR_NUM_WORKERS` | Worker count | 1 |
-| `CASCOR_MP_CONTEXT` | Multiprocessing method | forkserver |
+| Variable | Mode | Description | Default |
+|----------|------|-------------|---------|
+| `CASCOR_SERVER_URL` | WebSocket (default) | Worker endpoint URL (`ws://` or `wss://`) | *(required)* |
+| `CASCOR_AUTH_TOKEN` | WebSocket (default) | Token sent as `X-API-Key` header | empty |
+| `CASCOR_HEARTBEAT_INTERVAL` | WebSocket (default) | Seconds between heartbeat messages | `10.0` |
+| `CASCOR_TLS_CERT` | WebSocket (default) | Client certificate path for mTLS | unset |
+| `CASCOR_TLS_KEY` | WebSocket (default) | Client private key path for mTLS | unset |
+| `CASCOR_TLS_CA` | WebSocket (default) | Custom CA bundle for TLS verification | unset |
+| `CASCOR_MANAGER_HOST` | Legacy (`--legacy`) | Manager hostname | `127.0.0.1` |
+| `CASCOR_MANAGER_PORT` | Legacy (`--legacy`) | Manager port | `50000` |
+| `CASCOR_AUTHKEY` | Legacy (`--legacy`) | Manager authentication key | *(required in legacy mode)* |
+| `CASCOR_NUM_WORKERS` | Legacy (`--legacy`) | Worker process count | `1` |
+| `CASCOR_MP_CONTEXT` | Legacy (`--legacy`) | Multiprocessing method | `forkserver` |
 
 ## Juniper Ecosystem
 
