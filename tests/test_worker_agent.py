@@ -8,12 +8,7 @@ import pytest
 
 from juniper_cascor_worker.config import WorkerConfig
 from juniper_cascor_worker.exceptions import WorkerConfigError, WorkerConnectionError
-from juniper_cascor_worker.worker import (
-    CascorWorkerAgent,
-    _decode_binary_frame,
-    _encode_binary_frame,
-    _parse_json,
-)
+from juniper_cascor_worker.worker import CascorWorkerAgent, _decode_binary_frame, _encode_binary_frame, _parse_json
 
 
 def _make_ws_config(**overrides):
