@@ -15,7 +15,7 @@ def _make_ws_config(**overrides):
     """Return a WorkerConfig for WebSocket mode that passes validation."""
     defaults = {
         "server_url": "ws://localhost:8200/ws/v1/workers",
-        "api_key": "test-key",
+        "auth_token": "test-key",
     }
     defaults.update(overrides)
     return WorkerConfig(**defaults)
