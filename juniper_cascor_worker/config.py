@@ -59,6 +59,7 @@ class WorkerConfig:
         Environment variables (WebSocket mode):
             CASCOR_SERVER_URL: WebSocket URL
             CASCOR_AUTH_TOKEN: API key for authentication
+            CASCOR_API_KEY: Deprecated alias for CASCOR_AUTH_TOKEN
             CASCOR_HEARTBEAT_INTERVAL: Heartbeat interval in seconds
             CASCOR_TLS_CERT: Client certificate path
             CASCOR_TLS_KEY: Client key path
@@ -73,7 +74,7 @@ class WorkerConfig:
         """
         return cls(
             server_url=os.getenv("CASCOR_SERVER_URL", ""),
-            auth_token=os.getenv("CASCOR_AUTH_TOKEN", ""),
+            auth_token=os.getenv("CASCOR_AUTH_TOKEN") or os.getenv("CASCOR_API_KEY", ""),
             heartbeat_interval=float(os.getenv("CASCOR_HEARTBEAT_INTERVAL", "10.0")),
             tls_cert=os.getenv("CASCOR_TLS_CERT"),
             tls_key=os.getenv("CASCOR_TLS_KEY"),

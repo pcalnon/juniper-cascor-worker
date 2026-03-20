@@ -25,7 +25,14 @@ def main() -> None:
 
     # WebSocket mode arguments
     parser.add_argument("--server-url", default=None, help="WebSocket server URL (e.g., ws://host:8200/ws/v1/workers)")
-    parser.add_argument("--auth-token", default=None, help="Auth token for X-API-Key authentication")
+    # Keep --api-key as a compatibility alias for older deployments.
+    parser.add_argument(
+        "--auth-token",
+        "--api-key",
+        dest="auth_token",
+        default=None,
+        help="Auth token for X-API-Key authentication",
+    )
     parser.add_argument("--heartbeat-interval", type=float, default=10.0, help="Heartbeat interval in seconds (default: 10)")
     parser.add_argument("--tls-cert", default=None, help="Client certificate path (for mTLS)")
     parser.add_argument("--tls-key", default=None, help="Client key path (for mTLS)")
@@ -64,7 +71,7 @@ def _run_websocket(args: argparse.Namespace) -> None:
     from juniper_cascor_worker.worker import CascorWorkerAgent
 
     server_url = args.server_url or os.environ.get("CASCOR_SERVER_URL", "")
-    auth_token = args.auth_token or os.environ.get("CASCOR_AUTH_TOKEN", "")
+    auth_token = args.auth_token or os.environ.get("CASCOR_AUTH_TOKEN") or os.environ.get("CASCOR_API_KEY", "")
 
     config = WorkerConfig(
         server_url=server_url,
