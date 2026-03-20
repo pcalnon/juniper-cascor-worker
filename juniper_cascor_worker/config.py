@@ -17,7 +17,7 @@ class WorkerConfig:
 
     Attributes:
         server_url: WebSocket URL (e.g., ``ws://host:8200/ws/v1/workers``).
-        auth_token: API key for ``X-API-Key`` header authentication.
+        auth_token: Auth token for ``X-API-Key`` header authentication.
         heartbeat_interval: Seconds between heartbeat messages.
         reconnect_backoff_base: Initial reconnection delay in seconds.
         reconnect_backoff_max: Maximum reconnection delay in seconds.
