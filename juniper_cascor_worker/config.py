@@ -17,7 +17,7 @@ class WorkerConfig:
 
     Attributes:
         server_url: WebSocket URL (e.g., ``ws://host:8200/ws/v1/workers``).
-        auth_token: API key for ``X-API-Key`` header authentication.
+        auth_token: Auth token for ``X-API-Key`` header authentication.
         heartbeat_interval: Seconds between heartbeat messages.
         reconnect_backoff_base: Initial reconnection delay in seconds.
         reconnect_backoff_max: Maximum reconnection delay in seconds.
@@ -58,7 +58,7 @@ class WorkerConfig:
 
         Environment variables (WebSocket mode):
             CASCOR_SERVER_URL: WebSocket URL
-            CASCOR_AUTH_TOKEN: API key for authentication
+            CASCOR_AUTH_TOKEN: Auth token for authentication
             CASCOR_HEARTBEAT_INTERVAL: Heartbeat interval in seconds
             CASCOR_TLS_CERT: Client certificate path
             CASCOR_TLS_KEY: Client key path
