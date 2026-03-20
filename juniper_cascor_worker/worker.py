@@ -69,7 +69,7 @@ class CascorWorkerAgent:
         while not self._stop_event.is_set():
             self._connection = WorkerConnection(
                 server_url=self.config.server_url,
-                api_key=self.config.api_key,
+                api_key=self.config.auth_token,
                 tls_cert=self.config.tls_cert,
                 tls_key=self.config.tls_key,
                 tls_ca=self.config.tls_ca,
