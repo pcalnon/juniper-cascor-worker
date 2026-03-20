@@ -171,3 +171,24 @@ class TestWorkerConfigWebSocket:
             assert config.tls_cert == "/path/to/cert.pem"
             assert config.tls_key == "/path/to/key.pem"
             assert config.tls_ca == "/path/to/ca.pem"
+
+    def test_from_env_ws_fields_legacy_api_key_fallback(self):
+        """from_env falls back to CASCOR_API_KEY when new var is unset."""
+        env = {
+            "CASCOR_SERVER_URL": "ws://remote:8200/ws/v1/workers",
+            "CASCOR_API_KEY": "legacy-env-key",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            config = WorkerConfig.from_env()
+            assert config.auth_token == "legacy-env-key"
+
+    def test_from_env_ws_fields_prefers_new_token_name(self):
+        """CASCOR_AUTH_TOKEN takes precedence over deprecated alias."""
+        env = {
+            "CASCOR_SERVER_URL": "ws://remote:8200/ws/v1/workers",
+            "CASCOR_AUTH_TOKEN": "new-token",
+            "CASCOR_API_KEY": "legacy-env-key",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            config = WorkerConfig.from_env()
+            assert config.auth_token == "new-token"
