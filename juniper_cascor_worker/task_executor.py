@@ -6,7 +6,6 @@ Returns results as dicts + numpy tensors — no pickle involved.
 """
 
 import logging
-import random
 from typing import Any
 
 import numpy as np

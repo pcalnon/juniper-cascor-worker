@@ -140,7 +140,15 @@ class TestCLISignalHandler:
         def capture_signal(signum, handler):
             captured_handlers[signum] = handler
 
-        with patch("juniper_cascor_worker.cli.signal.signal", side_effect=capture_signal), patch("juniper_cascor_worker.config.WorkerConfig.validate"), patch("juniper_cascor_worker.worker.CandidateTrainingWorker.__init__", return_value=None), patch("juniper_cascor_worker.worker.CandidateTrainingWorker.connect"), patch("juniper_cascor_worker.worker.CandidateTrainingWorker.start"), patch("juniper_cascor_worker.worker.CandidateTrainingWorker.disconnect"), patch("juniper_cascor_worker.cli.threading.Event") as mock_event_cls:
+        with (
+            patch("juniper_cascor_worker.cli.signal.signal", side_effect=capture_signal),
+            patch("juniper_cascor_worker.config.WorkerConfig.validate"),
+            patch("juniper_cascor_worker.worker.CandidateTrainingWorker.__init__", return_value=None),
+            patch("juniper_cascor_worker.worker.CandidateTrainingWorker.connect"),
+            patch("juniper_cascor_worker.worker.CandidateTrainingWorker.start"),
+            patch("juniper_cascor_worker.worker.CandidateTrainingWorker.disconnect"),
+            patch("juniper_cascor_worker.cli.threading.Event") as mock_event_cls,
+        ):
             mock_event = MagicMock()
             mock_event.wait.return_value = None
             mock_event.is_set.return_value = False
@@ -179,7 +187,15 @@ class TestCLISignalHandler:
 
         real_event = threading.Event()
 
-        with patch("juniper_cascor_worker.cli.signal.signal", side_effect=capture_signal), patch("juniper_cascor_worker.config.WorkerConfig.validate"), patch("juniper_cascor_worker.worker.CandidateTrainingWorker.__init__", return_value=None), patch("juniper_cascor_worker.worker.CandidateTrainingWorker.connect"), patch("juniper_cascor_worker.worker.CandidateTrainingWorker.start"), patch("juniper_cascor_worker.worker.CandidateTrainingWorker.disconnect"), patch("juniper_cascor_worker.cli.threading.Event", return_value=real_event):
+        with (
+            patch("juniper_cascor_worker.cli.signal.signal", side_effect=capture_signal),
+            patch("juniper_cascor_worker.config.WorkerConfig.validate"),
+            patch("juniper_cascor_worker.worker.CandidateTrainingWorker.__init__", return_value=None),
+            patch("juniper_cascor_worker.worker.CandidateTrainingWorker.connect"),
+            patch("juniper_cascor_worker.worker.CandidateTrainingWorker.start"),
+            patch("juniper_cascor_worker.worker.CandidateTrainingWorker.disconnect"),
+            patch("juniper_cascor_worker.cli.threading.Event", return_value=real_event),
+        ):
             # Pre-set the event so shutdown_event.wait() returns immediately
             real_event.set()
 
@@ -220,7 +236,15 @@ class TestCLISignalHandler:
 
         real_event = threading.Event()
 
-        with patch("juniper_cascor_worker.cli.signal.signal", side_effect=capture_signal), patch("juniper_cascor_worker.config.WorkerConfig.validate"), patch("juniper_cascor_worker.worker.CandidateTrainingWorker.__init__", return_value=None), patch("juniper_cascor_worker.worker.CandidateTrainingWorker.connect"), patch("juniper_cascor_worker.worker.CandidateTrainingWorker.start"), patch("juniper_cascor_worker.worker.CandidateTrainingWorker.disconnect"), patch("juniper_cascor_worker.cli.threading.Event", return_value=real_event):
+        with (
+            patch("juniper_cascor_worker.cli.signal.signal", side_effect=capture_signal),
+            patch("juniper_cascor_worker.config.WorkerConfig.validate"),
+            patch("juniper_cascor_worker.worker.CandidateTrainingWorker.__init__", return_value=None),
+            patch("juniper_cascor_worker.worker.CandidateTrainingWorker.connect"),
+            patch("juniper_cascor_worker.worker.CandidateTrainingWorker.start"),
+            patch("juniper_cascor_worker.worker.CandidateTrainingWorker.disconnect"),
+            patch("juniper_cascor_worker.cli.threading.Event", return_value=real_event),
+        ):
             real_event.set()  # So wait() returns immediately
 
             main()

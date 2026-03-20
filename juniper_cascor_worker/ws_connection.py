@@ -164,7 +164,7 @@ class WorkerConnection:
             try:
                 await self._ws.close()
             except Exception:
-                pass
+                logger.debug("Error during WebSocket close (ignored)", exc_info=True)
             self._ws = None
             logger.info("Connection closed")
 

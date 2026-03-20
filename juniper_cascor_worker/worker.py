@@ -7,6 +7,8 @@ Two worker implementations:
   multiprocessing queues. Deprecated — use ``--legacy`` CLI flag.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -18,7 +20,10 @@ import time
 import uuid
 import warnings
 from multiprocessing.context import BaseContext
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
+
+if TYPE_CHECKING:
+    from juniper_cascor_worker.ws_connection import WorkerConnection
 
 import numpy as np
 
@@ -51,7 +56,7 @@ class CascorWorkerAgent:
         self.config = config
         self.worker_id = str(uuid.uuid4())
         self._stop_event = asyncio.Event()
-        self._connection = None
+        self._connection: WorkerConnection | None = None
 
     async def run(self) -> None:
         """Main entry point — connect, register, and process tasks.
@@ -193,9 +198,7 @@ class CascorWorkerAgent:
         candidate_data["candidate_index"] = msg.get("candidate_index", 0)
         training_params = msg.get("training_params", {})
 
-        result_dict, result_tensors = await asyncio.to_thread(
-            _execute_task, candidate_data, training_params, tensors
-        )
+        result_dict, result_tensors = await asyncio.to_thread(_execute_task, candidate_data, training_params, tensors)
 
         # Build tensor manifest for result
         tensor_manifest = {}
