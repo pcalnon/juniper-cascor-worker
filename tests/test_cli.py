@@ -326,7 +326,7 @@ class TestCLIWebSocketMode:
         mock_args.log_level = "INFO"
         mock_args.cascor_path = None
         mock_args.server_url = "ws://myhost:9999/ws/v1/workers"
-        mock_args.api_key = None
+        mock_args.auth_token = None
         mock_args.heartbeat_interval = 10.0
         mock_args.tls_cert = None
         mock_args.tls_key = None
@@ -345,14 +345,14 @@ class TestCLIWebSocketMode:
     @patch("juniper_cascor_worker.cli.asyncio.run")
     @patch("juniper_cascor_worker.cli.signal.signal")
     @patch("juniper_cascor_worker.cli.argparse.ArgumentParser.parse_args")
-    def test_api_key_arg(self, mock_parse_args, mock_signal_fn, mock_asyncio_run):
-        """--api-key passed to config."""
+    def test_auth_token_arg(self, mock_parse_args, mock_signal_fn, mock_asyncio_run):
+        """--auth-token passed to config."""
         mock_args = MagicMock()
         mock_args.legacy = False
         mock_args.log_level = "INFO"
         mock_args.cascor_path = None
         mock_args.server_url = "ws://localhost:8200/ws/v1/workers"
-        mock_args.api_key = "my-secret-key"
+        mock_args.auth_token = "my-secret-key"
         mock_args.heartbeat_interval = 10.0
         mock_args.tls_cert = None
         mock_args.tls_key = None
@@ -363,7 +363,7 @@ class TestCLIWebSocketMode:
             main()
 
             config_arg = mock_init.call_args[0][0]
-            assert config_arg.api_key == "my-secret-key"
+            assert config_arg.auth_token == "my-secret-key"
 
     @patch("juniper_cascor_worker.cli._run_websocket")
     @patch("juniper_cascor_worker.cli.argparse.ArgumentParser.parse_args")

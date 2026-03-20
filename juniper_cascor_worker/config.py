@@ -17,7 +17,7 @@ class WorkerConfig:
 
     Attributes:
         server_url: WebSocket URL (e.g., ``ws://host:8200/ws/v1/workers``).
-        api_key: API key for ``X-API-Key`` header authentication.
+        auth_token: Auth token for ``X-API-Key`` header authentication.
         heartbeat_interval: Seconds between heartbeat messages.
         reconnect_backoff_base: Initial reconnection delay in seconds.
         reconnect_backoff_max: Maximum reconnection delay in seconds.
@@ -35,7 +35,7 @@ class WorkerConfig:
 
     # WebSocket mode configuration
     server_url: str = ""
-    api_key: str = ""
+    auth_token: str = ""
     heartbeat_interval: float = 10.0
     reconnect_backoff_base: float = 1.0
     reconnect_backoff_max: float = 60.0
@@ -58,7 +58,7 @@ class WorkerConfig:
 
         Environment variables (WebSocket mode):
             CASCOR_SERVER_URL: WebSocket URL
-            CASCOR_API_KEY: API key for authentication
+            CASCOR_AUTH_TOKEN: Auth token for authentication
             CASCOR_HEARTBEAT_INTERVAL: Heartbeat interval in seconds
             CASCOR_TLS_CERT: Client certificate path
             CASCOR_TLS_KEY: Client key path
@@ -73,7 +73,7 @@ class WorkerConfig:
         """
         return cls(
             server_url=os.getenv("CASCOR_SERVER_URL", ""),
-            api_key=os.getenv("CASCOR_API_KEY", ""),
+            auth_token=os.getenv("CASCOR_AUTH_TOKEN", ""),
             heartbeat_interval=float(os.getenv("CASCOR_HEARTBEAT_INTERVAL", "10.0")),
             tls_cert=os.getenv("CASCOR_TLS_CERT"),
             tls_key=os.getenv("CASCOR_TLS_KEY"),

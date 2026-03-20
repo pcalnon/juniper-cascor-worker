@@ -94,7 +94,7 @@ class TestWorkerConfigWebSocket:
         """New WebSocket fields have correct defaults."""
         config = WorkerConfig()
         assert config.server_url == ""
-        assert config.api_key == ""
+        assert config.auth_token == ""
         assert config.heartbeat_interval == 10.0
         assert config.reconnect_backoff_base == 1.0
         assert config.reconnect_backoff_max == 60.0
@@ -154,10 +154,10 @@ class TestWorkerConfigWebSocket:
             config.validate(legacy=True)
 
     def test_from_env_ws_fields(self):
-        """from_env reads CASCOR_SERVER_URL, CASCOR_API_KEY, etc."""
+        """from_env reads CASCOR_SERVER_URL, CASCOR_AUTH_TOKEN, etc."""
         env = {
             "CASCOR_SERVER_URL": "ws://remote:8200/ws/v1/workers",
-            "CASCOR_API_KEY": "env-api-key",
+            "CASCOR_AUTH_TOKEN": "env-api-key",
             "CASCOR_HEARTBEAT_INTERVAL": "30.0",
             "CASCOR_TLS_CERT": "/path/to/cert.pem",
             "CASCOR_TLS_KEY": "/path/to/key.pem",
@@ -166,7 +166,7 @@ class TestWorkerConfigWebSocket:
         with patch.dict(os.environ, env, clear=True):
             config = WorkerConfig.from_env()
             assert config.server_url == "ws://remote:8200/ws/v1/workers"
-            assert config.api_key == "env-api-key"
+            assert config.auth_token == "env-api-key"
             assert config.heartbeat_interval == 30.0
             assert config.tls_cert == "/path/to/cert.pem"
             assert config.tls_key == "/path/to/key.pem"
