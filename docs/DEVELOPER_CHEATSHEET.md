@@ -174,5 +174,5 @@ WorkerError (base)
 - [juniper-cascor-worker REFERENCE.md](REFERENCE.md) -- Full API and CLI reference
 - [juniper-cascor-worker QUICK_START.md](QUICK_START.md) -- Getting started guide
 - [juniper-cascor-worker AGENTS.md](../AGENTS.md) -- Agent development guide
-- [Ecosystem Cheatsheet](../../juniper-ml/notes/DEVELOPER_CHEATSHEET.md) -- Cross-project procedures
-- [juniper-cascor-client Cheatsheet](../../juniper-cascor-client/docs/DEVELOPER_CHEATSHEET.md) -- HTTP/WebSocket client
+- [Ecosystem Cheatsheet](https://github.com/pcalnon/juniper-ml/blob/main/notes/DEVELOPER_CHEATSHEET.md) -- Cross-project procedures
+- [juniper-cascor-client Cheatsheet](https://github.com/pcalnon/juniper-cascor-client/blob/main/docs/DEVELOPER_CHEATSHEET.md) -- HTTP/WebSocket client

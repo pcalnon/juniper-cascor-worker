@@ -1,37 +1,45 @@
 """CLI entry point for the JuniperCascor remote worker."""
 
 import argparse
+import asyncio
 import logging
 import os
 import signal
 import sys
-
-from juniper_cascor_worker.config import WorkerConfig
-from juniper_cascor_worker.worker import CandidateTrainingWorker
+import threading
 
 
 def main() -> None:
-    """Run the remote candidate training worker."""
+    """Run the remote candidate training worker.
+
+    Default mode: WebSocket-based CascorWorkerAgent.
+    Legacy mode (``--legacy``): BaseManager-based CandidateTrainingWorker.
+    """
     parser = argparse.ArgumentParser(
         prog="juniper-cascor-worker",
         description="Remote candidate training worker for JuniperCascor",
     )
-    parser.add_argument("--manager-host", default="127.0.0.1", help="Manager hostname (default: 127.0.0.1)")
-    parser.add_argument("--manager-port", type=int, default=50000, help="Manager port (default: 50000)")
-    parser.add_argument("--authkey", default=None, help="Authentication key (required if CASCOR_AUTHKEY not set)")
-    parser.add_argument("--workers", type=int, default=1, help="Number of worker processes (default: 1)")
-    parser.add_argument(
-        "--mp-context",
-        default="forkserver",
-        choices=["forkserver", "spawn", "fork"],
-        help="Multiprocessing context (default: forkserver)",
-    )
-    parser.add_argument(
-        "--log-level",
-        default="INFO",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        help="Log level (default: INFO)",
-    )
+
+    # Mode selection
+    parser.add_argument("--legacy", action="store_true", help="Use legacy BaseManager worker (deprecated)")
+
+    # WebSocket mode arguments
+    parser.add_argument("--server-url", default=None, help="WebSocket server URL (e.g., ws://host:8200/ws/v1/workers)")
+    parser.add_argument("--api-key", default=None, help="API key for authentication")
+    parser.add_argument("--heartbeat-interval", type=float, default=10.0, help="Heartbeat interval in seconds (default: 10)")
+    parser.add_argument("--tls-cert", default=None, help="Client certificate path (for mTLS)")
+    parser.add_argument("--tls-key", default=None, help="Client key path (for mTLS)")
+    parser.add_argument("--tls-ca", default=None, help="CA certificate path (for mTLS)")
+
+    # Legacy mode arguments
+    parser.add_argument("--manager-host", default="127.0.0.1", help="[Legacy] Manager hostname (default: 127.0.0.1)")
+    parser.add_argument("--manager-port", type=int, default=50000, help="[Legacy] Manager port (default: 50000)")
+    parser.add_argument("--authkey", default=None, help="[Legacy] Authentication key")
+    parser.add_argument("--workers", type=int, default=1, help="[Legacy] Number of worker processes (default: 1)")
+    parser.add_argument("--mp-context", default="forkserver", choices=["forkserver", "spawn", "fork"], help="[Legacy] Multiprocessing context (default: forkserver)")
+
+    # Shared arguments
+    parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Log level (default: INFO)")
     parser.add_argument("--cascor-path", help="Path to CasCor src directory (added to sys.path)")
 
     args = parser.parse_args()
@@ -44,7 +52,60 @@ def main() -> None:
     if args.cascor_path:
         sys.path.insert(0, args.cascor_path)
 
-    # Resolve authkey: CLI arg > env var > fail at validation
+    if args.legacy:
+        _run_legacy(args)
+    else:
+        _run_websocket(args)
+
+
+def _run_websocket(args: argparse.Namespace) -> None:
+    """Run the WebSocket-based CascorWorkerAgent."""
+    from juniper_cascor_worker.config import WorkerConfig
+    from juniper_cascor_worker.worker import CascorWorkerAgent
+
+    server_url = args.server_url or os.environ.get("CASCOR_SERVER_URL", "")
+    api_key = args.api_key or os.environ.get("CASCOR_API_KEY", "")
+
+    config = WorkerConfig(
+        server_url=server_url,
+        api_key=api_key,
+        heartbeat_interval=args.heartbeat_interval,
+        tls_cert=args.tls_cert,
+        tls_key=args.tls_key,
+        tls_ca=args.tls_ca,
+    )
+    config.validate(legacy=False)
+
+    agent = CascorWorkerAgent(config)
+
+    # Cross-platform shutdown via threading.Event (replaces signal.pause)
+    shutdown_event = threading.Event()
+
+    def signal_handler(signum, frame):
+        if shutdown_event.is_set():
+            sys.exit(1)
+        logging.getLogger(__name__).info("Shutdown requested (Ctrl+C again to force)")
+        agent.stop()
+        shutdown_event.set()
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    logging.getLogger(__name__).info("Starting WebSocket worker — connecting to %s", config.server_url)
+
+    try:
+        asyncio.run(agent.run())
+    except KeyboardInterrupt:
+        pass
+
+    logging.getLogger(__name__).info("Worker shut down.")
+
+
+def _run_legacy(args: argparse.Namespace) -> None:
+    """Run the legacy BaseManager-based CandidateTrainingWorker."""
+    from juniper_cascor_worker.config import WorkerConfig
+    from juniper_cascor_worker.worker import CandidateTrainingWorker
+
     authkey = args.authkey or os.environ.get("CASCOR_AUTHKEY", "")
 
     config = WorkerConfig(
@@ -54,15 +115,15 @@ def main() -> None:
         num_workers=args.workers,
         mp_context=args.mp_context,
     )
-    config.validate()
+    config.validate(legacy=True)
 
-    shutdown_requested = False
+    # Cross-platform shutdown via threading.Event (replaces signal.pause)
+    shutdown_event = threading.Event()
 
     def signal_handler(signum, frame):
-        nonlocal shutdown_requested
-        if shutdown_requested:
+        if shutdown_event.is_set():
             sys.exit(1)
-        shutdown_requested = True
+        shutdown_event.set()
         logging.getLogger(__name__).info("Shutdown requested (Ctrl+C again to force)")
 
     signal.signal(signal.SIGINT, signal_handler)
@@ -79,9 +140,8 @@ def main() -> None:
             config.manager_port,
         )
 
-        # Block until shutdown requested
-        while not shutdown_requested and worker.is_running:
-            signal.pause()
+        # Block until shutdown — cross-platform (no signal.pause)
+        shutdown_event.wait()
 
     except KeyboardInterrupt:
         pass

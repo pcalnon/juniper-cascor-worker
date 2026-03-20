@@ -90,4 +90,4 @@ juniper-ml ──meta-package──> juniper-cascor-worker
 **Version:** 0.1.0
 **Maintainer:** Paul Calnon
 
-> See the [Juniper Ecosystem Guide](../../CLAUDE.md) for the full project map and dependency graph.
+> See the [Juniper Ecosystem Guide](https://github.com/pcalnon/juniper-ml/blob/main/CLAUDE.md) for the full project map and dependency graph.
