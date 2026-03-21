@@ -350,7 +350,8 @@ jobs:
           echo "╚════════════════════════════════════════════════════════════╝"
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install numpy
-          pip freeze | grep -ivE "^juniper[-_]cascor[-_]worker" > reports/security/requirements.txt
+          # Strip +cpu local version identifier so pip-audit can resolve torch from PyPI
+          pip freeze | grep -ivE "^juniper[-_]cascor[-_]worker" | sed 's/+cpu//' > reports/security/requirements.txt
           pip-audit -r reports/security/requirements.txt --strict --desc on \
             || (echo "::error::Critical/High vulnerabilities found in dependencies" && exit 1)
 
