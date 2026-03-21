@@ -1,4 +1,5 @@
 __pycache__/
+.serena
 *.pyc
 *.egg-info/
 dist/
