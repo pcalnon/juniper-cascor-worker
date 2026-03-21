@@ -76,6 +76,11 @@ minversion = "6.0"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = ["-ra", "-q", "--strict-markers"]
+filterwarnings = [
+    "error",
+    "ignore:CandidateTrainingWorker is deprecated:DeprecationWarning:tests.test_worker",
+    "ignore:coroutine .* was never awaited:RuntimeWarning",
+]
 markers = [
     "unit: Unit tests",
     "integration: Integration tests requiring live manager",

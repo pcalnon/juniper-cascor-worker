@@ -192,9 +192,10 @@ repos:
         name: Security scan tests with Bandit (relaxed)
         args:
           - -q
-          - --skip=B101,B104,B108,B110,B311
+          - --skip=B101,B104,B105,B108,B110,B311
           # B101: assert_used (tests use assertions extensively)
           # B104: hardcoded_bind_all_interfaces (test fixtures)
+          # B105: hardcoded_password_string (test fixtures use dummy credentials)
           # B108: hardcoded_tmp_directory (tests use /tmp paths)
           # B110: try_except_pass (common test patterns)
           # B311: random (not used for security in tests)

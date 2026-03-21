@@ -9,6 +9,8 @@ from juniper_cascor_worker.config import WorkerConfig
 from juniper_cascor_worker.exceptions import WorkerConfigError, WorkerConnectionError, WorkerError
 from juniper_cascor_worker.worker import CandidateTrainingWorker
 
+pytestmark = pytest.mark.filterwarnings("ignore:CandidateTrainingWorker is deprecated:DeprecationWarning")
+
 
 class TestWorkerInit:
     def test_default_config_uses_placeholder_authkey(self):

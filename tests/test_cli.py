@@ -396,9 +396,7 @@ class TestCLIWebSocketMode:
         mock_parse_args.return_value = mock_args
 
         with patch.dict("os.environ", {"CASCOR_API_KEY": "legacy-env-key"}, clear=True):
-            with patch("juniper_cascor_worker.config.WorkerConfig.validate"), patch(
-                "juniper_cascor_worker.worker.CascorWorkerAgent.__init__", return_value=None
-            ) as mock_init:
+            with patch("juniper_cascor_worker.config.WorkerConfig.validate"), patch("juniper_cascor_worker.worker.CascorWorkerAgent.__init__", return_value=None) as mock_init:
                 main()
 
                 config_arg = mock_init.call_args[0][0]
