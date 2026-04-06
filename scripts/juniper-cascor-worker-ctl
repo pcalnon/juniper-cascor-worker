@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+#####################################################################################################################################################################################################
+# Project:       Juniper
+# Application:   juniper-cascor-worker
+# File Name:     juniper-cascor-worker-ctl
+# Author:        Paul Calnon
+#
+# License:       MIT License
+# Copyright:     Copyright (c) 2024-2026 Paul Calnon
+#
+# Description:
+#    Management CLI for the juniper-cascor-worker systemd user service.
+#    Provides start/stop/restart/status/logs/resources commands.
+#
+# Usage:
+#    juniper-cascor-worker-ctl start | stop | restart | status | logs | resources
+#
+#####################################################################################################################################################################################################
+
+set -euo pipefail
+
+SERVICE="juniper-cascor-worker"
+
+# Colors
+if [[ -z "${NO_COLOR:-}" ]]; then
+    GREEN='\033[0;32m'
+    RED='\033[0;31m'
+    YELLOW='\033[0;33m'
+    CYAN='\033[0;36m'
+    BOLD='\033[1m'
+    RESET='\033[0m'
+else
+    GREEN='' RED='' YELLOW='' CYAN='' BOLD='' RESET=''
+fi
+
+usage() {
+    echo -e "${BOLD}juniper-cascor-worker-ctl${RESET} — Juniper CasCor Worker service manager"
+    echo ""
+    echo -e "${YELLOW}Usage:${RESET} juniper-cascor-worker-ctl <command>"
+    echo ""
+    echo -e "  ${CYAN}start${RESET}       Start the service"
+    echo -e "  ${CYAN}stop${RESET}        Stop the service"
+    echo -e "  ${CYAN}restart${RESET}     Restart the service"
+    echo -e "  ${CYAN}status${RESET}      Show service status"
+    echo -e "  ${CYAN}logs${RESET}        Follow service logs (journalctl)"
+    echo -e "  ${CYAN}resources${RESET}   Show CPU and memory usage"
+    echo ""
+}
+
+cmd_start() {
+    systemctl --user start "$SERVICE"
+    echo -e "${GREEN}${SERVICE} started.${RESET}"
+}
+
+cmd_stop() {
+    systemctl --user stop "$SERVICE"
+    echo -e "${YELLOW}${SERVICE} stopped.${RESET}"
+}
+
+cmd_restart() {
+    systemctl --user restart "$SERVICE"
+    echo -e "${GREEN}${SERVICE} restarted.${RESET}"
+}
+
+cmd_status() {
+    systemctl --user status "$SERVICE" --no-pager || true
+}
+
+cmd_logs() {
+    journalctl --user -u "$SERVICE" -f --no-pager
+}
+
+cmd_resources() {
+    echo -e "${BOLD}Resource Usage: ${SERVICE}${RESET}"
+    systemctl --user show "$SERVICE" --property=MemoryCurrent,CPUUsageNSec --no-pager 2>/dev/null || true
+    echo ""
+    # Show process-level details if running
+    local pid
+    pid=$(systemctl --user show "$SERVICE" --property=MainPID --value 2>/dev/null || echo "0")
+    if [[ "$pid" != "0" && -n "$pid" ]]; then
+        echo -e "${CYAN}Process ${pid}:${RESET}"
+        ps -p "$pid" -o pid,pcpu,pmem,rss,vsz,etime,args --no-headers 2>/dev/null || echo "  (not running)"
+    else
+        echo -e "${YELLOW}Service is not running.${RESET}"
+    fi
+}
+
+case "${1:-}" in
+    start)     cmd_start ;;
+    stop)      cmd_stop ;;
+    restart)   cmd_restart ;;
+    status)    cmd_status ;;
+    logs)      cmd_logs ;;
+    resources) cmd_resources ;;
+    -h|--help) usage ;;
+    *)         usage; exit 1 ;;
+esac
