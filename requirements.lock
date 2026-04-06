@@ -59,7 +59,7 @@ nvidia-nvshmem-cu13==3.4.5
     # via torch
 nvidia-nvtx==13.0.85
     # via cuda-toolkit
-setuptools==81.0.0
+setuptools>=81.0.0
     # via torch
 sympy==1.14.0
     # via torch
