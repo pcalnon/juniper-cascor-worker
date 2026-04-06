@@ -26,7 +26,7 @@ For conda/mamba-managed dependencies, see `conf/conda_environment_ci.yaml`.
 | Dependency | Version | Management Method | Purpose |
 |------------|---------|-------------------|---------|
 | build | >=1.0.0 | pip | Python package builder |
-| setuptools | >=61.0 | pip | Build backend |
+| setuptools | >=82.0 | pip | Build backend |
 | wheel | latest | pip | Wheel format support |
 | twine | >=4.0.0 | pip | Package upload/validation for PyPI |
 
