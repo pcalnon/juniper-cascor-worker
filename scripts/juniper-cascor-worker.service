@@ -1,0 +1,49 @@
+# =============================================================================
+# juniper-cascor-worker — systemd User Service Unit
+#
+# Installation:
+#   mkdir -p ~/.config/systemd/user
+#   cp scripts/juniper-cascor-worker.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable juniper-cascor-worker
+#   systemctl --user start juniper-cascor-worker
+#
+# Logs:
+#   journalctl --user -u juniper-cascor-worker -f
+#
+# Prerequisites:
+#   - conda environment "JuniperCascor" with all dependencies installed
+#   - .env file configured in the project root (optional)
+#   - juniper-cascor service running (or CASCOR_SERVER_URL set)
+# =============================================================================
+
+[Unit]
+Description=Juniper CasCor Worker — Distributed CasCor Training Worker
+Documentation=https://github.com/pcalnon/juniper-cascor-worker
+After=network-online.target juniper-cascor.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Development/python/Juniper/juniper-cascor-worker
+EnvironmentFile=-%h/Development/python/Juniper/juniper-cascor-worker/.env
+ExecStart=/opt/miniforge3/envs/JuniperCascor/bin/juniper-cascor-worker
+Restart=on-failure
+RestartSec=5
+
+# Resource limits (training workloads — same as cascor)
+MemoryMax=4G
+CPUQuota=400%%
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/Development/python/Juniper/juniper-cascor-worker/logs
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,85 @@
+# =============================================================================
+# JuniperCascorWorker Docker Build Exclusions
+# =============================================================================
+# Excludes files not needed in the Docker build context to reduce image size
+# and build time. Keep in sync with .gitignore where applicable.
+# =============================================================================
+
+# Git and version control
+.git/
+.gitignore
+.github/
+
+# IDE and editor files
+.vscode/
+.idea/
+.trunk/
+*.swp
+*.swo
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+*.egg
+dist/
+build/
+wheels/
+*.whl
+
+# Test and coverage
+tests/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+reports/
+*.prof
+TEST*.xml
+TEST*.html
+
+# Development tools
+.pre-commit-config.yaml
+.serena/
+.claude/
+
+# Documentation (not needed at runtime)
+docs/
+notes/
+*.md
+!README.md
+
+# Configuration and scripts (not needed at runtime)
+conf/
+scripts/
+
+# Local data and logs (will be mounted as volumes)
+data/
+logs/
+images/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.out
+
+# Large media files
+*.mp4
+*.avi
+*.mov
+*.jpg
+*.jpeg
+*.gif
+*.png
+*.xcf
+
+# Archives
+*.gz
+*.tgz
+*.tar
+*.zip
+*.bz
