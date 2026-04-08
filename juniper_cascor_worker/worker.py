@@ -57,6 +57,7 @@ class CascorWorkerAgent:
         self.worker_id = str(uuid.uuid4())
         self._stop_event = asyncio.Event()
         self._connection: WorkerConnection | None = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     async def run(self) -> None:
         """Main entry point — connect, register, and process tasks.
@@ -65,6 +66,8 @@ class CascorWorkerAgent:
         (with automatic reconnection).
         """
         from juniper_cascor_worker.ws_connection import WorkerConnection
+
+        self._loop = asyncio.get_running_loop()
 
         while not self._stop_event.is_set():
             self._connection = WorkerConnection(
@@ -117,8 +120,16 @@ class CascorWorkerAgent:
         logger.info("Worker agent stopped")
 
     def stop(self) -> None:
-        """Signal the agent to stop."""
-        self._stop_event.set()
+        """Signal the agent to stop.
+
+        Uses ``call_soon_threadsafe`` when the event loop is running on
+        another thread (e.g. when invoked from a signal handler on the
+        main thread) so that ``asyncio.Event.set()`` is scheduled safely.
+        """
+        if self._loop is not None and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._stop_event.set)
+        else:
+            self._stop_event.set()
 
     async def _register(self) -> None:
         """Send registration message and wait for acknowledgment."""
