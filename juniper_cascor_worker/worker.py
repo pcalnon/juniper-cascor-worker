@@ -82,6 +82,7 @@ class CascorWorkerAgent:
                 await self._connection.connect_with_retry(
                     backoff_base=self.config.reconnect_backoff_base,
                     backoff_max=self.config.reconnect_backoff_max,
+                    stop_event=self._stop_event,
                 )
 
                 # Wait for connection_established
@@ -209,7 +210,31 @@ class CascorWorkerAgent:
         candidate_data["candidate_index"] = msg.get("candidate_index", 0)
         training_params = msg.get("training_params", {})
 
-        result_dict, result_tensors = await asyncio.to_thread(_execute_task, candidate_data, training_params, tensors)
+        try:
+            result_dict, result_tensors = await asyncio.wait_for(
+                asyncio.to_thread(_execute_task, candidate_data, training_params, tensors),
+                timeout=self.config.task_timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.error("Task %s timed out after %.0fs", task_id, self.config.task_timeout)
+            error_msg = {
+                "type": "task_result",
+                "task_id": task_id,
+                "candidate_id": candidate_data.get("candidate_index", 0),
+                "candidate_uuid": "",
+                "correlation": 0.0,
+                "success": False,
+                "epochs_completed": 0,
+                "activation_name": candidate_data.get("activation_name", ""),
+                "all_correlations": [],
+                "numerator": 0.0,
+                "denominator": 1.0,
+                "best_corr_idx": -1,
+                "error_message": f"Task timed out after {self.config.task_timeout:.0f}s",
+                "tensor_manifest": {},
+            }
+            await self._connection.send_json(error_msg)
+            return
 
         # Build tensor manifest for result
         tensor_manifest = {}

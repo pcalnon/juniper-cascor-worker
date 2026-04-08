@@ -36,12 +36,14 @@ class WorkerConnection:
         tls_cert: str | None = None,
         tls_key: str | None = None,
         tls_ca: str | None = None,
+        receive_timeout: float | None = None,
     ) -> None:
         self._server_url = server_url
         self._api_key = api_key
         self._tls_cert = tls_cert
         self._tls_key = tls_key
         self._tls_ca = tls_ca
+        self._receive_timeout = receive_timeout
         self._ws: ClientConnection | None = None
 
     @property
@@ -80,6 +82,7 @@ class WorkerConnection:
         backoff_base: float = 1.0,
         backoff_max: float = 60.0,
         max_retries: int | None = None,
+        stop_event: asyncio.Event | None = None,
     ) -> None:
         """Connect with exponential backoff retry.
 
@@ -87,14 +90,20 @@ class WorkerConnection:
             backoff_base: Initial delay between retries in seconds.
             backoff_max: Maximum delay between retries in seconds.
             max_retries: Maximum number of retries. None for unlimited.
+            stop_event: Optional event checked between retries for
+                responsive shutdown.  When set, the retry loop exits
+                immediately by raising :exc:`WorkerConnectionError`.
 
         Raises:
-            WorkerConnectionError: If max_retries exceeded.
+            WorkerConnectionError: If max_retries exceeded or stop_event is set.
         """
         delay = backoff_base
         attempt = 0
 
         while True:
+            if stop_event is not None and stop_event.is_set():
+                raise WorkerConnectionError("Stop event set — aborting connection retry")
+
             try:
                 await self.connect()
                 return
@@ -104,7 +113,26 @@ class WorkerConnection:
                     raise
 
                 logger.warning("Connection attempt %d failed, retrying in %.1fs", attempt, delay)
-                await asyncio.sleep(delay)
+
+                # Sleep interruptibly — wake early if stop_event is set
+                if stop_event is not None:
+                    stop_task = asyncio.create_task(stop_event.wait())
+                    sleep_task = asyncio.create_task(asyncio.sleep(delay))
+                    done, pending = await asyncio.wait(
+                        {stop_task, sleep_task},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    for task in pending:
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+                    if stop_event.is_set():
+                        raise WorkerConnectionError("Stop event set — aborting connection retry")
+                else:
+                    await asyncio.sleep(delay)
+
                 delay = min(delay * 2, backoff_max)
 
     async def send_json(self, msg: dict[str, Any]) -> None:
@@ -122,15 +150,22 @@ class WorkerConnection:
     async def receive(self) -> str | bytes:
         """Receive the next message (text or binary).
 
+        If ``receive_timeout`` was set on construction, the recv is wrapped
+        with :func:`asyncio.wait_for`.  On timeout, :exc:`asyncio.TimeoutError`
+        propagates so the caller can trigger reconnection.
+
         Returns:
             str for text messages, bytes for binary messages.
 
         Raises:
             WorkerConnectionError: If not connected or connection closed.
+            asyncio.TimeoutError: If receive_timeout expires.
         """
         if not self.connected:
             raise WorkerConnectionError("Not connected")
         try:
+            if self._receive_timeout is not None:
+                return await asyncio.wait_for(self._ws.recv(), timeout=self._receive_timeout)
             return await self._ws.recv()
         except websockets.ConnectionClosed as e:
             self._ws = None

@@ -522,3 +522,91 @@ class TestReconnectionOnDisconnect:
         assert connect_count == 2
         mock_conn_fail.connect_with_retry.assert_awaited_once()
         mock_conn_fail.close.assert_awaited()
+
+
+@pytest.mark.unit
+class TestTaskTimeout:
+    """Tests for task execution timeout handling."""
+
+    @pytest.mark.asyncio
+    async def test_task_timeout_sends_error_result(self):
+        """When task exceeds timeout, an error result is sent back to server."""
+        config = _make_ws_config(task_timeout=0.01)
+        agent = CascorWorkerAgent(config)
+
+        test_input = np.random.randn(5, 3).astype(np.float32)
+        encoded_input = _encode_binary_frame(test_input)
+        encoded_error = _encode_binary_frame(np.random.randn(5, 1).astype(np.float32))
+
+        mock_conn = AsyncMock()
+        mock_conn.receive_bytes.side_effect = [encoded_input, encoded_error]
+        agent._connection = mock_conn
+
+        task_msg = {
+            "type": "task_assign",
+            "task_id": "task-timeout-001",
+            "candidate_index": 0,
+            "candidate_data": {"input_size": 3, "activation_name": "sigmoid"},
+            "training_params": {"epochs": 100},
+            "tensor_manifest": {"candidate_input": {}, "residual_error": {}},
+        }
+
+        # Simulate a slow task that exceeds the timeout
+        async def slow_to_thread(func, *args):
+            await asyncio.sleep(10.0)
+            return {}, {}
+
+        with patch("juniper_cascor_worker.worker.asyncio.to_thread", side_effect=slow_to_thread):
+            with patch("juniper_cascor_worker.worker.asyncio.wait_for", side_effect=asyncio.TimeoutError()):
+                await agent._handle_task_assign(task_msg)
+
+        # Verify error result was sent
+        send_json_calls = mock_conn.send_json.call_args_list
+        assert len(send_json_calls) == 1
+        error_msg = send_json_calls[0][0][0]
+        assert error_msg["type"] == "task_result"
+        assert error_msg["task_id"] == "task-timeout-001"
+        assert error_msg["success"] is False
+        assert "timed out" in error_msg["error_message"]
+        assert error_msg["tensor_manifest"] == {}
+
+        # Verify no binary frames were sent (no successful result)
+        mock_conn.send_bytes.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_task_timeout_default_config(self):
+        """Default task_timeout is 3600 seconds."""
+        config = _make_ws_config()
+        assert config.task_timeout == 3600.0
+
+
+@pytest.mark.unit
+class TestStopEventPassedToRetry:
+    """Tests that stop_event is passed to connect_with_retry."""
+
+    @pytest.mark.asyncio
+    async def test_run_passes_stop_event(self):
+        """run() passes self._stop_event to connect_with_retry."""
+        config = _make_ws_config()
+        agent = CascorWorkerAgent(config)
+
+        mock_conn = AsyncMock()
+        # First call to connect_with_retry will succeed, then we stop during message loop
+        mock_conn.receive_json.side_effect = [
+            {"type": "connection_established"},
+            {"type": "registration_ack"},
+        ]
+        mock_conn.receive.side_effect = WorkerConnectionError("disconnect")
+        mock_conn.close = AsyncMock()
+
+        def make_conn_and_stop(**kwargs):
+            # Stop after the first connection so run() exits
+            agent._stop_event.set()
+            return mock_conn
+
+        with patch("juniper_cascor_worker.ws_connection.WorkerConnection", side_effect=make_conn_and_stop), patch.object(CascorWorkerAgent, "_build_capabilities", return_value={"cpu_cores": 4}), patch("juniper_cascor_worker.worker.asyncio.sleep", new_callable=AsyncMock):
+            await agent.run()
+
+        # Verify stop_event was passed to connect_with_retry
+        call_kwargs = mock_conn.connect_with_retry.call_args
+        assert call_kwargs.kwargs.get("stop_event") is agent._stop_event
