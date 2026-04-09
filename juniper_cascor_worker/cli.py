@@ -8,6 +8,8 @@ import signal
 import sys
 import threading
 
+from juniper_cascor_worker.constants import DEFAULT_HEARTBEAT_INTERVAL, DEFAULT_LOG_LEVEL, DEFAULT_MANAGER_HOST, DEFAULT_MANAGER_PORT, DEFAULT_MP_CONTEXT, DEFAULT_NUM_WORKERS, DEFAULT_TASK_TIMEOUT, ENV_API_KEY, ENV_AUTH_TOKEN, ENV_AUTHKEY, ENV_SERVER_URL, ENV_TASK_TIMEOUT, LOG_FORMAT, VALID_LOG_LEVELS, VALID_MP_CONTEXTS
+
 
 def main() -> None:
     """Run the remote candidate training worker.
@@ -33,28 +35,28 @@ def main() -> None:
         default=None,
         help="Auth token for X-API-Key authentication",
     )
-    parser.add_argument("--heartbeat-interval", type=float, default=10.0, help="Heartbeat interval in seconds (default: 10)")
+    parser.add_argument("--heartbeat-interval", type=float, default=DEFAULT_HEARTBEAT_INTERVAL, help="Heartbeat interval in seconds (default: 10)")
     parser.add_argument("--tls-cert", default=None, help="Client certificate path (for mTLS)")
     parser.add_argument("--tls-key", default=None, help="Client key path (for mTLS)")
     parser.add_argument("--tls-ca", default=None, help="CA certificate path (for mTLS)")
-    parser.add_argument("--task-timeout", type=float, default=3600.0, help="Maximum seconds for a single training task (default: 3600)")
+    parser.add_argument("--task-timeout", type=float, default=DEFAULT_TASK_TIMEOUT, help="Maximum seconds for a single training task (default: 3600)")
 
     # Legacy mode arguments
-    parser.add_argument("--manager-host", default="127.0.0.1", help="[Legacy] Manager hostname (default: 127.0.0.1)")
-    parser.add_argument("--manager-port", type=int, default=50000, help="[Legacy] Manager port (default: 50000)")
+    parser.add_argument("--manager-host", default=DEFAULT_MANAGER_HOST, help="[Legacy] Manager hostname (default: 127.0.0.1)")
+    parser.add_argument("--manager-port", type=int, default=DEFAULT_MANAGER_PORT, help="[Legacy] Manager port (default: 50000)")
     parser.add_argument("--authkey", default=None, help="[Legacy] Authentication key")
-    parser.add_argument("--workers", type=int, default=1, help="[Legacy] Number of worker processes (default: 1)")
-    parser.add_argument("--mp-context", default="forkserver", choices=["forkserver", "spawn", "fork"], help="[Legacy] Multiprocessing context (default: forkserver)")
+    parser.add_argument("--workers", type=int, default=DEFAULT_NUM_WORKERS, help="[Legacy] Number of worker processes (default: 1)")
+    parser.add_argument("--mp-context", default=DEFAULT_MP_CONTEXT, choices=list(VALID_MP_CONTEXTS), help="[Legacy] Multiprocessing context (default: forkserver)")
 
     # Shared arguments
-    parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Log level (default: INFO)")
+    parser.add_argument("--log-level", default=DEFAULT_LOG_LEVEL, choices=list(VALID_LOG_LEVELS), help="Log level (default: INFO)")
     parser.add_argument("--cascor-path", help="Path to CasCor src directory (added to sys.path)")
 
     args = parser.parse_args()
 
     logging.basicConfig(
         level=getattr(logging, args.log_level),
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        format=LOG_FORMAT,
     )
 
     if args.cascor_path:
@@ -71,10 +73,10 @@ def _run_websocket(args: argparse.Namespace) -> None:
     from juniper_cascor_worker.config import WorkerConfig
     from juniper_cascor_worker.worker import CascorWorkerAgent
 
-    server_url = args.server_url or os.environ.get("CASCOR_SERVER_URL", "")
-    auth_token = args.auth_token or os.environ.get("CASCOR_AUTH_TOKEN") or os.environ.get("CASCOR_API_KEY", "")
+    server_url = args.server_url or os.environ.get(ENV_SERVER_URL, "")
+    auth_token = args.auth_token or os.environ.get(ENV_AUTH_TOKEN) or os.environ.get(ENV_API_KEY, "")
 
-    task_timeout = args.task_timeout if args.task_timeout != 3600.0 else float(os.environ.get("CASCOR_TASK_TIMEOUT", "3600.0"))
+    task_timeout = args.task_timeout if args.task_timeout != DEFAULT_TASK_TIMEOUT else float(os.environ.get(ENV_TASK_TIMEOUT, str(DEFAULT_TASK_TIMEOUT)))
 
     config = WorkerConfig(
         server_url=server_url,
@@ -117,7 +119,7 @@ def _run_legacy(args: argparse.Namespace) -> None:
     from juniper_cascor_worker.config import WorkerConfig
     from juniper_cascor_worker.worker import CandidateTrainingWorker
 
-    authkey = args.authkey or os.environ.get("CASCOR_AUTHKEY", "")
+    authkey = args.authkey or os.environ.get(ENV_AUTHKEY, "")
 
     config = WorkerConfig(
         manager_host=args.manager_host,

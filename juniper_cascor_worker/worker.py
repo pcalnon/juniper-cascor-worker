@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 import numpy as np
 
 from juniper_cascor_worker.config import WorkerConfig
+from juniper_cascor_worker.constants import BINARY_FRAME_DTYPE_ENCODING, BINARY_FRAME_HEADER_LENGTH_BYTES, BINARY_FRAME_HEADER_LENGTH_FORMAT, DEFAULT_CORRELATION, DEFAULT_DENOMINATOR, DEFAULT_NUMERATOR, MAX_JSON_ERROR_PREVIEW_LENGTH, MSG_TYPE_CONNECTION_ESTABLISHED, MSG_TYPE_ERROR, MSG_TYPE_HEARTBEAT, MSG_TYPE_REGISTER, MSG_TYPE_REGISTRATION_ACK, MSG_TYPE_RESULT_ACK, MSG_TYPE_TASK_ASSIGN, MSG_TYPE_TASK_RESULT, NO_BEST_CORR_IDX, NO_EPOCHS_COMPLETED
 from juniper_cascor_worker.exceptions import WorkerConnectionError, WorkerError
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,7 @@ class CascorWorkerAgent:
 
                 # Wait for connection_established
                 ack = await self._connection.receive_json()
-                if ack.get("type") != "connection_established":
+                if ack.get("type") != MSG_TYPE_CONNECTION_ESTABLISHED:
                     logger.warning("Unexpected first message: %s", ack)
 
                 # Register
@@ -136,14 +137,14 @@ class CascorWorkerAgent:
         """Send registration message and wait for acknowledgment."""
         capabilities = self._build_capabilities()
         msg = {
-            "type": "register",
+            "type": MSG_TYPE_REGISTER,
             "worker_id": self.worker_id,
             "capabilities": capabilities,
         }
         await self._connection.send_json(msg)
 
         ack = await self._connection.receive_json()
-        if ack.get("type") != "registration_ack":
+        if ack.get("type") != MSG_TYPE_REGISTRATION_ACK:
             raise WorkerConnectionError(f"Registration failed: {ack}")
 
         logger.info("Registered as worker %s", self.worker_id)
@@ -155,7 +156,7 @@ class CascorWorkerAgent:
                 await asyncio.sleep(self.config.heartbeat_interval)
                 if self._connection and self._connection.connected:
                     msg = {
-                        "type": "heartbeat",
+                        "type": MSG_TYPE_HEARTBEAT,
                         "worker_id": self.worker_id,
                         "timestamp": time.time(),
                     }
@@ -180,14 +181,14 @@ class CascorWorkerAgent:
 
             msg_type = msg.get("type")
 
-            if msg_type == "task_assign":
+            if msg_type == MSG_TYPE_TASK_ASSIGN:
                 await self._handle_task_assign(msg)
-            elif msg_type == "heartbeat":
+            elif msg_type == MSG_TYPE_HEARTBEAT:
                 pass  # Server heartbeat response — no action needed
-            elif msg_type == "result_ack":
+            elif msg_type == MSG_TYPE_RESULT_ACK:
                 status = msg.get("status", "unknown")
                 logger.debug("Result ack: task %s — %s", msg.get("task_id"), status)
-            elif msg_type == "error":
+            elif msg_type == MSG_TYPE_ERROR:
                 logger.error("Server error: %s", msg.get("error"))
             else:
                 logger.warning("Unknown message type: %s", msg_type)
@@ -218,18 +219,18 @@ class CascorWorkerAgent:
         except asyncio.TimeoutError:
             logger.error("Task %s timed out after %.0fs", task_id, self.config.task_timeout)
             error_msg = {
-                "type": "task_result",
+                "type": MSG_TYPE_TASK_RESULT,
                 "task_id": task_id,
                 "candidate_id": candidate_data.get("candidate_index", 0),
                 "candidate_uuid": "",
-                "correlation": 0.0,
+                "correlation": DEFAULT_CORRELATION,
                 "success": False,
-                "epochs_completed": 0,
+                "epochs_completed": NO_EPOCHS_COMPLETED,
                 "activation_name": candidate_data.get("activation_name", ""),
                 "all_correlations": [],
-                "numerator": 0.0,
-                "denominator": 1.0,
-                "best_corr_idx": -1,
+                "numerator": DEFAULT_NUMERATOR,
+                "denominator": DEFAULT_DENOMINATOR,
+                "best_corr_idx": NO_BEST_CORR_IDX,
                 "error_message": f"Task timed out after {self.config.task_timeout:.0f}s",
                 "tensor_manifest": {},
             }
@@ -245,18 +246,18 @@ class CascorWorkerAgent:
 
         # Send result JSON
         result_msg = {
-            "type": "task_result",
+            "type": MSG_TYPE_TASK_RESULT,
             "task_id": task_id,
             "candidate_id": result_dict.get("candidate_id", 0),
             "candidate_uuid": result_dict.get("candidate_uuid", ""),
-            "correlation": result_dict.get("correlation", 0.0),
+            "correlation": result_dict.get("correlation", DEFAULT_CORRELATION),
             "success": result_dict.get("success", False),
-            "epochs_completed": result_dict.get("epochs_completed", 0),
+            "epochs_completed": result_dict.get("epochs_completed", NO_EPOCHS_COMPLETED),
             "activation_name": result_dict.get("activation_name", ""),
             "all_correlations": result_dict.get("all_correlations", []),
-            "numerator": result_dict.get("numerator", 0.0),
-            "denominator": result_dict.get("denominator", 1.0),
-            "best_corr_idx": result_dict.get("best_corr_idx", -1),
+            "numerator": result_dict.get("numerator", DEFAULT_NUMERATOR),
+            "denominator": result_dict.get("denominator", DEFAULT_DENOMINATOR),
+            "best_corr_idx": result_dict.get("best_corr_idx", NO_BEST_CORR_IDX),
             "error_message": result_dict.get("error_message"),
             "tensor_manifest": tensor_manifest,
         }
@@ -269,7 +270,7 @@ class CascorWorkerAgent:
         logger.info(
             "Sent result for task %s (corr=%.4f, success=%s)",
             task_id,
-            result_dict.get("correlation", 0.0),
+            result_dict.get("correlation", DEFAULT_CORRELATION),
             result_dict.get("success", False),
         )
 
@@ -311,7 +312,7 @@ def _parse_json(raw: str) -> dict[str, Any] | None:
     try:
         return json.loads(raw)
     except (json.JSONDecodeError, TypeError):
-        logger.error("Invalid JSON message: %s", raw[:200] if raw else "")
+        logger.error("Invalid JSON message: %s", raw[:MAX_JSON_ERROR_PREVIEW_LENGTH] if raw else "")
         return None
 
 
@@ -319,9 +320,9 @@ def _encode_binary_frame(array: np.ndarray) -> bytes:
     """Encode a numpy array as a binary frame (matches Phase 1b BinaryFrame.encode)."""
     arr = np.ascontiguousarray(array)
     shape = arr.shape
-    dtype_str = str(arr.dtype).encode("utf-8")
+    dtype_str = str(arr.dtype).encode(BINARY_FRAME_DTYPE_ENCODING)
     header = struct.pack(f"<I{len(shape)}I", len(shape), *shape)
-    header += struct.pack("<I", len(dtype_str))
+    header += struct.pack(BINARY_FRAME_HEADER_LENGTH_FORMAT, len(dtype_str))
     header += dtype_str
     return header + arr.tobytes()
 
@@ -329,13 +330,13 @@ def _encode_binary_frame(array: np.ndarray) -> bytes:
 def _decode_binary_frame(data: bytes) -> np.ndarray:
     """Decode a binary frame into a numpy array (matches Phase 1b BinaryFrame.decode)."""
     offset = 0
-    (ndim,) = struct.unpack_from("<I", data, offset)
-    offset += 4
+    (ndim,) = struct.unpack_from(BINARY_FRAME_HEADER_LENGTH_FORMAT, data, offset)
+    offset += BINARY_FRAME_HEADER_LENGTH_BYTES
     shape = struct.unpack_from(f"<{ndim}I", data, offset)
-    offset += ndim * 4
-    (dtype_len,) = struct.unpack_from("<I", data, offset)
-    offset += 4
-    dtype_str = data[offset : offset + dtype_len].decode("utf-8")
+    offset += ndim * BINARY_FRAME_HEADER_LENGTH_BYTES
+    (dtype_len,) = struct.unpack_from(BINARY_FRAME_HEADER_LENGTH_FORMAT, data, offset)
+    offset += BINARY_FRAME_HEADER_LENGTH_BYTES
+    dtype_str = data[offset : offset + dtype_len].decode(BINARY_FRAME_DTYPE_ENCODING)
     offset += dtype_len
     dtype = np.dtype(dtype_str)
     array = np.frombuffer(data[offset:], dtype=dtype).reshape(shape)

@@ -13,6 +13,7 @@ from typing import Any
 import websockets
 from websockets.asyncio.client import ClientConnection
 
+from juniper_cascor_worker.constants import AUTH_HEADER_NAME, DEFAULT_RECONNECT_BACKOFF_BASE, DEFAULT_RECONNECT_BACKOFF_MAX, WEBSOCKET_STATE_OPEN, WS_SCHEME_SECURE
 from juniper_cascor_worker.exceptions import WorkerConnectionError
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ class WorkerConnection:
     @property
     def connected(self) -> bool:
         """Whether the WebSocket is currently open."""
-        return self._ws is not None and self._ws.protocol.state.name == "OPEN"
+        return self._ws is not None and self._ws.protocol.state.name == WEBSOCKET_STATE_OPEN
 
     async def connect(self) -> None:
         """Open a WebSocket connection to the server.
@@ -62,7 +63,7 @@ class WorkerConnection:
         """
         headers: dict[str, str] = {}
         if self._api_key:
-            headers["X-API-Key"] = self._api_key
+            headers[AUTH_HEADER_NAME] = self._api_key
 
         ssl_context = self._build_ssl_context()
 
@@ -79,8 +80,8 @@ class WorkerConnection:
 
     async def connect_with_retry(
         self,
-        backoff_base: float = 1.0,
-        backoff_max: float = 60.0,
+        backoff_base: float = DEFAULT_RECONNECT_BACKOFF_BASE,
+        backoff_max: float = DEFAULT_RECONNECT_BACKOFF_MAX,
         max_retries: int | None = None,
         stop_event: asyncio.Event | None = None,
     ) -> None:
@@ -205,7 +206,7 @@ class WorkerConnection:
 
     def _build_ssl_context(self) -> ssl.SSLContext | None:
         """Build SSL context for TLS/mTLS connections."""
-        if not self._server_url.startswith("wss://"):
+        if not self._server_url.startswith(WS_SCHEME_SECURE):
             return None
 
         ctx = ssl.create_default_context()
