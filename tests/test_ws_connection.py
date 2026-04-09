@@ -1,5 +1,6 @@
 """Tests for WorkerConnection WebSocket client."""
 
+import asyncio
 import json
 import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -213,3 +214,122 @@ class TestSSLContext:
         conn = WorkerConnection("ws://localhost:8200/ws/v1/workers")
         result = conn._build_ssl_context()
         assert result is None
+
+
+@pytest.mark.unit
+class TestReceiveTimeout:
+    """Tests for the receive_timeout feature."""
+
+    @pytest.mark.asyncio
+    async def test_receive_timeout_none_by_default(self):
+        """Default receive_timeout is None (no timeout)."""
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers")
+        assert conn._receive_timeout is None
+
+    @pytest.mark.asyncio
+    async def test_receive_timeout_configured(self):
+        """receive_timeout is stored when passed to constructor."""
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers", receive_timeout=30.0)
+        assert conn._receive_timeout == 30.0
+
+    @pytest.mark.asyncio
+    async def test_receive_with_timeout_success(self):
+        """receive() returns data normally when timeout is set and recv completes."""
+        mock_ws = _make_mock_ws()
+        mock_ws.recv.return_value = '{"type": "ack"}'
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers", receive_timeout=5.0)
+        conn._ws = mock_ws
+
+        result = await conn.receive()
+        assert result == '{"type": "ack"}'
+
+    @pytest.mark.asyncio
+    async def test_receive_with_timeout_expires(self):
+        """receive() raises asyncio.TimeoutError when recv does not complete in time."""
+        mock_ws = _make_mock_ws()
+
+        async def slow_recv():
+            await asyncio.sleep(10.0)
+
+        mock_ws.recv = slow_recv
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers", receive_timeout=0.01)
+        conn._ws = mock_ws
+
+        with pytest.raises(asyncio.TimeoutError):
+            await conn.receive()
+
+    @pytest.mark.asyncio
+    async def test_receive_without_timeout_no_wrap(self):
+        """receive() does not wrap with wait_for when timeout is None."""
+        mock_ws = _make_mock_ws()
+        mock_ws.recv.return_value = b"\x00\x01"
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers")  # No timeout
+        conn._ws = mock_ws
+
+        result = await conn.receive()
+        assert result == b"\x00\x01"
+
+
+@pytest.mark.unit
+class TestConnectWithRetryStopEvent:
+    """Tests for stop_event in connect_with_retry."""
+
+    @pytest.mark.asyncio
+    async def test_stop_event_already_set_before_retry(self):
+        """connect_with_retry raises immediately when stop_event is pre-set."""
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers")
+        stop = asyncio.Event()
+        stop.set()
+
+        with pytest.raises(WorkerConnectionError, match="Stop event set"):
+            await conn.connect_with_retry(stop_event=stop)
+
+    @pytest.mark.asyncio
+    async def test_stop_event_set_during_backoff_sleep(self):
+        """connect_with_retry exits when stop_event fires during sleep."""
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers")
+        stop = asyncio.Event()
+
+        call_count = 0
+
+        async def failing_connect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            raise WorkerConnectionError("refused")
+
+        with patch.object(conn, "connect", side_effect=failing_connect):
+
+            async def set_stop_soon():
+                await asyncio.sleep(0.02)
+                stop.set()
+
+            task = asyncio.create_task(set_stop_soon())
+            with pytest.raises(WorkerConnectionError, match="Stop event set"):
+                await conn.connect_with_retry(backoff_base=5.0, backoff_max=10.0, stop_event=stop)
+            await task
+
+        # Should have failed at least once before stop triggered
+        assert call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_stop_event_none_behaves_normally(self):
+        """connect_with_retry works as before when stop_event is None."""
+        mock_ws = _make_mock_ws()
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers")
+
+        with patch("juniper_cascor_worker.ws_connection.websockets.connect", new_callable=AsyncMock, return_value=mock_ws):
+            await conn.connect_with_retry(stop_event=None)
+
+        assert conn.connected is True
+
+    @pytest.mark.asyncio
+    async def test_stop_event_with_successful_connect(self):
+        """connect_with_retry succeeds normally even with stop_event provided (not set)."""
+        mock_ws = _make_mock_ws()
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers")
+        stop = asyncio.Event()  # Not set
+
+        with patch("juniper_cascor_worker.ws_connection.websockets.connect", new_callable=AsyncMock, return_value=mock_ws):
+            await conn.connect_with_retry(stop_event=stop)
+
+        assert conn.connected is True

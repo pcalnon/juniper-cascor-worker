@@ -37,6 +37,7 @@ def main() -> None:
     parser.add_argument("--tls-cert", default=None, help="Client certificate path (for mTLS)")
     parser.add_argument("--tls-key", default=None, help="Client key path (for mTLS)")
     parser.add_argument("--tls-ca", default=None, help="CA certificate path (for mTLS)")
+    parser.add_argument("--task-timeout", type=float, default=3600.0, help="Maximum seconds for a single training task (default: 3600)")
 
     # Legacy mode arguments
     parser.add_argument("--manager-host", default="127.0.0.1", help="[Legacy] Manager hostname (default: 127.0.0.1)")
@@ -73,10 +74,13 @@ def _run_websocket(args: argparse.Namespace) -> None:
     server_url = args.server_url or os.environ.get("CASCOR_SERVER_URL", "")
     auth_token = args.auth_token or os.environ.get("CASCOR_AUTH_TOKEN") or os.environ.get("CASCOR_API_KEY", "")
 
+    task_timeout = args.task_timeout if args.task_timeout != 3600.0 else float(os.environ.get("CASCOR_TASK_TIMEOUT", "3600.0"))
+
     config = WorkerConfig(
         server_url=server_url,
         auth_token=auth_token,
         heartbeat_interval=args.heartbeat_interval,
+        task_timeout=task_timeout,
         tls_cert=args.tls_cert,
         tls_key=args.tls_key,
         tls_ca=args.tls_ca,

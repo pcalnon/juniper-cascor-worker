@@ -21,6 +21,7 @@ class WorkerConfig:
         heartbeat_interval: Seconds between heartbeat messages.
         reconnect_backoff_base: Initial reconnection delay in seconds.
         reconnect_backoff_max: Maximum reconnection delay in seconds.
+        task_timeout: Maximum seconds for a single training task (default: 3600).
         tls_cert: Client certificate path (for mTLS, Phase 4).
         tls_key: Client key path (for mTLS, Phase 4).
         tls_ca: CA certificate path (for mTLS, Phase 4).
@@ -39,6 +40,7 @@ class WorkerConfig:
     heartbeat_interval: float = 10.0
     reconnect_backoff_base: float = 1.0
     reconnect_backoff_max: float = 60.0
+    task_timeout: float = 3600.0
     tls_cert: str | None = None
     tls_key: str | None = None
     tls_ca: str | None = None
@@ -61,6 +63,7 @@ class WorkerConfig:
             CASCOR_AUTH_TOKEN: API key for authentication
             CASCOR_API_KEY: Deprecated alias for CASCOR_AUTH_TOKEN
             CASCOR_HEARTBEAT_INTERVAL: Heartbeat interval in seconds
+            CASCOR_TASK_TIMEOUT: Maximum seconds for a single training task
             CASCOR_TLS_CERT: Client certificate path
             CASCOR_TLS_KEY: Client key path
             CASCOR_TLS_CA: CA certificate path
@@ -76,6 +79,7 @@ class WorkerConfig:
             server_url=os.getenv("CASCOR_SERVER_URL", ""),
             auth_token=os.getenv("CASCOR_AUTH_TOKEN") or os.getenv("CASCOR_API_KEY", ""),
             heartbeat_interval=float(os.getenv("CASCOR_HEARTBEAT_INTERVAL", "10.0")),
+            task_timeout=float(os.getenv("CASCOR_TASK_TIMEOUT", "3600.0")),
             tls_cert=os.getenv("CASCOR_TLS_CERT"),
             tls_key=os.getenv("CASCOR_TLS_KEY"),
             tls_ca=os.getenv("CASCOR_TLS_CA"),
@@ -111,6 +115,8 @@ class WorkerConfig:
                 raise WorkerConfigError(f"heartbeat_interval must be > 0, got {self.heartbeat_interval}")
             if self.reconnect_backoff_base <= 0:
                 raise WorkerConfigError(f"reconnect_backoff_base must be > 0, got {self.reconnect_backoff_base}")
+            if self.task_timeout <= 0:
+                raise WorkerConfigError(f"task_timeout must be > 0, got {self.task_timeout}")
 
     @property
     def address(self) -> tuple:

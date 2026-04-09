@@ -192,3 +192,42 @@ class TestWorkerConfigWebSocket:
         with patch.dict(os.environ, env, clear=True):
             config = WorkerConfig.from_env()
             assert config.auth_token == "new-token"
+
+    def test_task_timeout_default(self):
+        """task_timeout defaults to 3600 seconds."""
+        config = WorkerConfig()
+        assert config.task_timeout == 3600.0
+
+    def test_task_timeout_custom(self):
+        """task_timeout can be set explicitly."""
+        config = WorkerConfig(server_url="ws://localhost:8200/ws/v1/workers", task_timeout=7200.0)
+        config.validate(legacy=False)  # Should not raise
+        assert config.task_timeout == 7200.0
+
+    def test_task_timeout_invalid(self):
+        """task_timeout <= 0 raises WorkerConfigError."""
+        config = WorkerConfig(server_url="ws://localhost:8200/ws/v1/workers", task_timeout=0)
+        with pytest.raises(WorkerConfigError, match="task_timeout"):
+            config.validate(legacy=False)
+
+    def test_task_timeout_negative(self):
+        """Negative task_timeout raises WorkerConfigError."""
+        config = WorkerConfig(server_url="ws://localhost:8200/ws/v1/workers", task_timeout=-1.0)
+        with pytest.raises(WorkerConfigError, match="task_timeout"):
+            config.validate(legacy=False)
+
+    def test_from_env_task_timeout(self):
+        """from_env reads CASCOR_TASK_TIMEOUT."""
+        env = {
+            "CASCOR_SERVER_URL": "ws://remote:8200/ws/v1/workers",
+            "CASCOR_TASK_TIMEOUT": "1800.0",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            config = WorkerConfig.from_env()
+            assert config.task_timeout == 1800.0
+
+    def test_from_env_task_timeout_default(self):
+        """from_env uses 3600 default when CASCOR_TASK_TIMEOUT unset."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = WorkerConfig.from_env()
+            assert config.task_timeout == 3600.0

@@ -57,6 +57,7 @@ class CascorWorkerAgent:
         self.worker_id = str(uuid.uuid4())
         self._stop_event = asyncio.Event()
         self._connection: WorkerConnection | None = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     async def run(self) -> None:
         """Main entry point — connect, register, and process tasks.
@@ -65,6 +66,8 @@ class CascorWorkerAgent:
         (with automatic reconnection).
         """
         from juniper_cascor_worker.ws_connection import WorkerConnection
+
+        self._loop = asyncio.get_running_loop()
 
         while not self._stop_event.is_set():
             self._connection = WorkerConnection(
@@ -79,6 +82,7 @@ class CascorWorkerAgent:
                 await self._connection.connect_with_retry(
                     backoff_base=self.config.reconnect_backoff_base,
                     backoff_max=self.config.reconnect_backoff_max,
+                    stop_event=self._stop_event,
                 )
 
                 # Wait for connection_established
@@ -117,8 +121,16 @@ class CascorWorkerAgent:
         logger.info("Worker agent stopped")
 
     def stop(self) -> None:
-        """Signal the agent to stop."""
-        self._stop_event.set()
+        """Signal the agent to stop.
+
+        Uses ``call_soon_threadsafe`` when the event loop is running on
+        another thread (e.g. when invoked from a signal handler on the
+        main thread) so that ``asyncio.Event.set()`` is scheduled safely.
+        """
+        if self._loop is not None and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._stop_event.set)
+        else:
+            self._stop_event.set()
 
     async def _register(self) -> None:
         """Send registration message and wait for acknowledgment."""
@@ -198,7 +210,31 @@ class CascorWorkerAgent:
         candidate_data["candidate_index"] = msg.get("candidate_index", 0)
         training_params = msg.get("training_params", {})
 
-        result_dict, result_tensors = await asyncio.to_thread(_execute_task, candidate_data, training_params, tensors)
+        try:
+            result_dict, result_tensors = await asyncio.wait_for(
+                asyncio.to_thread(_execute_task, candidate_data, training_params, tensors),
+                timeout=self.config.task_timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.error("Task %s timed out after %.0fs", task_id, self.config.task_timeout)
+            error_msg = {
+                "type": "task_result",
+                "task_id": task_id,
+                "candidate_id": candidate_data.get("candidate_index", 0),
+                "candidate_uuid": "",
+                "correlation": 0.0,
+                "success": False,
+                "epochs_completed": 0,
+                "activation_name": candidate_data.get("activation_name", ""),
+                "all_correlations": [],
+                "numerator": 0.0,
+                "denominator": 1.0,
+                "best_corr_idx": -1,
+                "error_message": f"Task timed out after {self.config.task_timeout:.0f}s",
+                "tensor_manifest": {},
+            }
+            await self._connection.send_json(error_msg)
+            return
 
         # Build tensor manifest for result
         tensor_manifest = {}
