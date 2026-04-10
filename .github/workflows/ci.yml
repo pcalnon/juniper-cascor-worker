@@ -324,7 +324,7 @@ jobs:
       - name: Install security tools
         run: |
           python -m pip install --upgrade pip
-          pip install "setuptools>=82" bandit pip-audit
+          pip install "setuptools>=82" "bandit[sarif]" pip-audit
 
       - name: Create reports directory
         run: mkdir -p reports/security
@@ -334,7 +334,7 @@ jobs:
           echo "╔════════════════════════════════════════════════════════════╗"
           echo "║       juniper-cascor-worker - Bandit Security Scan         ║"
           echo "╚════════════════════════════════════════════════════════════╝"
-          bandit -r juniper_cascor_worker -f sarif -o reports/security/bandit.sarif || true
+          bandit -r juniper_cascor_worker -f sarif -o reports/security/bandit.sarif --exit-zero
 
       - name: Upload Bandit SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13  # v4.35.1
@@ -350,8 +350,13 @@ jobs:
           echo "╚════════════════════════════════════════════════════════════╝"
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install numpy
-          # Strip +cpu local version identifier so pip-audit can resolve torch from PyPI
-          pip freeze | grep -ivE "^juniper[-_]cascor[-_]worker" | sed 's/+cpu//' > reports/security/requirements.txt
+          # Strip +cpu local version identifier so pip-audit can resolve torch from PyPI.
+          # Also strip setuptools — torch's wheel index ships setuptools 70.2.0 (vulnerable
+          # to PYSEC-2025-49) and torch hard-pins setuptools<82, so the freeze captures
+          # the vulnerable version. We replace the exact pin with a >= constraint below
+          # so pip-audit's resolver picks a non-vulnerable version in [78.1.1, 82).
+          pip freeze | grep -ivE "^juniper[-_]cascor[-_]worker|^setuptools==" | sed 's/+cpu//' > reports/security/requirements.txt
+          echo "setuptools>=78.1.1" >> reports/security/requirements.txt
           pip-audit -r reports/security/requirements.txt --strict --desc on \
             || (echo "::error::Critical/High vulnerabilities found in dependencies" && exit 1)
 
