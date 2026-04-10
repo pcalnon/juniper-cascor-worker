@@ -324,7 +324,7 @@ jobs:
       - name: Install security tools
         run: |
           python -m pip install --upgrade pip
-          pip install "setuptools>=82" bandit pip-audit
+          pip install "setuptools>=82" "bandit[sarif]" pip-audit
 
       - name: Create reports directory
         run: mkdir -p reports/security
@@ -334,7 +334,7 @@ jobs:
           echo "╔════════════════════════════════════════════════════════════╗"
           echo "║       juniper-cascor-worker - Bandit Security Scan         ║"
           echo "╚════════════════════════════════════════════════════════════╝"
-          bandit -r juniper_cascor_worker -f sarif -o reports/security/bandit.sarif || true
+          bandit -r juniper_cascor_worker -f sarif -o reports/security/bandit.sarif --exit-zero
 
       - name: Upload Bandit SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13  # v4.35.1
@@ -352,6 +352,12 @@ jobs:
           pip install numpy
           # Strip +cpu local version identifier so pip-audit can resolve torch from PyPI
           pip freeze | grep -ivE "^juniper[-_]cascor[-_]worker" | sed 's/+cpu//' > reports/security/requirements.txt
+          # Pin setuptools to a non-vulnerable version (PYSEC-2025-49 affects <78.1.1).
+          # pip-audit creates its own resolution venv with the runner's bundled
+          # setuptools (~70.x on Python 3.12), so we must pin it explicitly here —
+          # `pip install "setuptools>=82"` in the install step only affects the
+          # outer environment, not pip-audit's internal resolver.
+          echo "setuptools>=78.1.1" >> reports/security/requirements.txt
           pip-audit -r reports/security/requirements.txt --strict --desc on \
             || (echo "::error::Critical/High vulnerabilities found in dependencies" && exit 1)
 
