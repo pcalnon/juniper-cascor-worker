@@ -303,6 +303,7 @@ juniper-cascor-worker/
 |   +-- py.typed                        # PEP 561 type marker
 |   +-- cli.py                          # CLI entry point
 |   +-- config.py                       # WorkerConfig dataclass
+|   +-- constants.py                    # Wire-protocol message types, defaults, env var names
 |   +-- worker.py                       # CascorWorkerAgent + CandidateTrainingWorker
 |   +-- ws_connection.py                # WebSocket connection management
 |   +-- task_executor.py                # Training task execution
@@ -341,6 +342,38 @@ juniper-cascor-worker/
     |   +-- publish.yml                 # PyPI publishing (OIDC)
     +-- dependabot.yml                  # Automated dependency updates
 ```
+
+---
+
+## Constants
+
+Every previously inline literal in `worker.py`, `task_executor.py`, `ws_connection.py`, `config.py`, and `cli.py` is centralized in `juniper_cascor_worker/constants.py`. Application code imports from this module rather than embedding literals.
+
+### Categories
+
+| Prefix / Group | Examples | Purpose |
+|----------------|----------|---------|
+| `MSG_TYPE_*` | `MSG_TYPE_REGISTER='register'`, `MSG_TYPE_HEARTBEAT='heartbeat'`, `MSG_TYPE_TASK_ASSIGN`, `MSG_TYPE_TASK_RESULT`, `MSG_TYPE_TOKEN_REFRESH`, `MSG_TYPE_ERROR`, `MSG_TYPE_CONNECTION_ESTABLISHED`, `MSG_TYPE_REGISTRATION_ACK`, `MSG_TYPE_RESULT_ACK` | WebSocket wire-protocol message-type discriminators — **must remain bit-identical** to the cascor server's `MessageType(StrEnum)` |
+| `BINARY_FRAME_*` | `BINARY_FRAME_DTYPE_ENCODING='utf-8'`, `BINARY_FRAME_HEADER_LENGTH_FORMAT='<I'`, `BINARY_FRAME_HEADER_LENGTH_BYTES=4` | Binary frame header format used by `BinaryFrame.encode/decode` — must remain bit-identical to the server's struct format |
+| `AUTH_*` | `AUTH_HEADER_NAME='X-API-Key'`, `AUTH_TOKEN_ENV_VAR` | Auth header / env var names |
+| Defaults | Worker concurrency, timeout, backoff, heartbeat tuning, task queue sizes | Default values for `WorkerConfig` fields and CLI flag defaults |
+| Env var names | `ENV_*` | All environment variables `WorkerConfig.from_env()` reads |
+
+### Alignment with `juniper-cascor`
+
+The cascor server is the canonical source for the wire protocol. Wave 5 verified that:
+
+- All 6 `MSG_TYPE_*` values exactly equal `MessageType[NAME].value` in `juniper-cascor/src/api/workers/protocol.py`.
+- `BINARY_FRAME_DTYPE_ENCODING`, `BINARY_FRAME_HEADER_LENGTH_FORMAT`, and `BINARY_FRAME_HEADER_LENGTH_BYTES` exactly match the server's hardcoded `'utf-8'`, `'<I'`, and `4`-byte struct header.
+- `AUTH_HEADER_NAME` matches the literal `"X-API-Key"` checked by the server's `APIKeyHeader`.
+
+### Modifying
+
+When the cascor server changes the wire protocol:
+
+1. Update the constant in `constants.py` first
+2. Update the consuming code (worker.py, task_executor.py, ws_connection.py)
+3. Re-run the cross-repo bit-identity check from the project roadmap before merging — a mismatch silently breaks worker connectivity
 
 ---
 

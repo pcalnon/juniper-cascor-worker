@@ -11,6 +11,8 @@ from typing import Any
 import numpy as np
 import torch
 
+from juniper_cascor_worker.constants import ACTIVATION_RELU, ACTIVATION_SIGMOID, ACTIVATION_TANH, CANDIDATE_UNIT_LOG_LEVEL, DEFAULT_ACTIVATION, DEFAULT_CORRELATION, DEFAULT_DENOMINATOR, DEFAULT_DISPLAY_FREQUENCY, DEFAULT_LEARNING_RATE, DEFAULT_NUMERATOR, DEFAULT_RANDOM_MAX_VALUE, DEFAULT_RANDOM_VALUE_SCALE, DEFAULT_SEQUENCE_MAX_VALUE, DEFAULT_TRAINING_EPOCHS, NO_BEST_CORR_IDX, NO_EPOCHS_COMPLETED
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,22 +52,22 @@ def execute_training_task(
 
     try:
         # Resolve activation function
-        activation_fn = _get_activation_function(candidate_data.get("activation_name", "sigmoid"))
+        activation_fn = _get_activation_function(candidate_data.get("activation_name", DEFAULT_ACTIVATION))
 
         # Create CandidateUnit
         candidate = CandidateUnit(
             CandidateUnit__input_size=candidate_data["input_size"],
             CandidateUnit__activation_function=activation_fn,
-            CandidateUnit__epochs=training_params.get("epochs", 200),
-            CandidateUnit__learning_rate=training_params.get("learning_rate", 0.01),
-            CandidateUnit__display_frequency=training_params.get("display_frequency", 100),
+            CandidateUnit__epochs=training_params.get("epochs", DEFAULT_TRAINING_EPOCHS),
+            CandidateUnit__learning_rate=training_params.get("learning_rate", DEFAULT_LEARNING_RATE),
+            CandidateUnit__display_frequency=training_params.get("display_frequency", DEFAULT_DISPLAY_FREQUENCY),
             CandidateUnit__random_seed=candidate_data.get("candidate_seed"),
-            CandidateUnit__random_value_scale=candidate_data.get("random_value_scale", 1.0),
-            CandidateUnit__random_max_value=candidate_data.get("random_max_value", 1.0),
-            CandidateUnit__sequence_max_value=candidate_data.get("sequence_max_value", 1.0),
+            CandidateUnit__random_value_scale=candidate_data.get("random_value_scale", DEFAULT_RANDOM_VALUE_SCALE),
+            CandidateUnit__random_max_value=candidate_data.get("random_max_value", DEFAULT_RANDOM_MAX_VALUE),
+            CandidateUnit__sequence_max_value=candidate_data.get("sequence_max_value", DEFAULT_SEQUENCE_MAX_VALUE),
             CandidateUnit__uuid=candidate_uuid,
             CandidateUnit__candidate_index=candidate_index,
-            CandidateUnit__log_level_name="INFO",
+            CandidateUnit__log_level_name=CANDIDATE_UNIT_LOG_LEVEL,
         )
 
         # Convert numpy tensors to torch
@@ -75,10 +77,10 @@ def execute_training_task(
         # Train
         training_result = candidate.train_detailed(
             x=candidate_input,
-            epochs=training_params.get("epochs", 200),
+            epochs=training_params.get("epochs", DEFAULT_TRAINING_EPOCHS),
             residual_error=residual_error,
-            learning_rate=training_params.get("learning_rate", 0.01),
-            display_frequency=training_params.get("display_frequency", 100),
+            learning_rate=training_params.get("learning_rate", DEFAULT_LEARNING_RATE),
+            display_frequency=training_params.get("display_frequency", DEFAULT_DISPLAY_FREQUENCY),
         )
 
         # Clear non-picklable display callbacks
@@ -86,7 +88,7 @@ def execute_training_task(
         candidate.clear_display_status()
 
         # Extract result fields
-        correlation = float(training_result.correlation) if training_result.correlation is not None else 0.0
+        correlation = float(training_result.correlation) if training_result.correlation is not None else DEFAULT_CORRELATION
         all_correlations = training_result.all_correlations if training_result.all_correlations is not None else []
         if isinstance(all_correlations, (torch.Tensor, np.ndarray)):
             all_correlations = [float(c) for c in all_correlations]
@@ -96,12 +98,12 @@ def execute_training_task(
             "candidate_uuid": str(candidate_uuid),
             "correlation": correlation,
             "success": training_result.success if hasattr(training_result, "success") else True,
-            "epochs_completed": training_result.epochs_completed if hasattr(training_result, "epochs_completed") else training_params.get("epochs", 200),
-            "activation_name": candidate_data.get("activation_name", "sigmoid"),
+            "epochs_completed": training_result.epochs_completed if hasattr(training_result, "epochs_completed") else training_params.get("epochs", DEFAULT_TRAINING_EPOCHS),
+            "activation_name": candidate_data.get("activation_name", DEFAULT_ACTIVATION),
             "all_correlations": all_correlations,
-            "numerator": float(training_result.numerator) if hasattr(training_result, "numerator") and training_result.numerator is not None else 0.0,
-            "denominator": float(training_result.denominator) if hasattr(training_result, "denominator") and training_result.denominator is not None else 1.0,
-            "best_corr_idx": int(training_result.best_corr_idx) if hasattr(training_result, "best_corr_idx") and training_result.best_corr_idx is not None else -1,
+            "numerator": float(training_result.numerator) if hasattr(training_result, "numerator") and training_result.numerator is not None else DEFAULT_NUMERATOR,
+            "denominator": float(training_result.denominator) if hasattr(training_result, "denominator") and training_result.denominator is not None else DEFAULT_DENOMINATOR,
+            "best_corr_idx": int(training_result.best_corr_idx) if hasattr(training_result, "best_corr_idx") and training_result.best_corr_idx is not None else NO_BEST_CORR_IDX,
             "error_message": None,
         }
 
@@ -141,14 +143,14 @@ def execute_training_task(
         result_dict = {
             "candidate_id": candidate_index,
             "candidate_uuid": str(candidate_uuid),
-            "correlation": 0.0,
+            "correlation": DEFAULT_CORRELATION,
             "success": False,
-            "epochs_completed": 0,
-            "activation_name": candidate_data.get("activation_name", "sigmoid"),
+            "epochs_completed": NO_EPOCHS_COMPLETED,
+            "activation_name": candidate_data.get("activation_name", DEFAULT_ACTIVATION),
             "all_correlations": [],
-            "numerator": 0.0,
-            "denominator": 1.0,
-            "best_corr_idx": -1,
+            "numerator": DEFAULT_NUMERATOR,
+            "denominator": DEFAULT_DENOMINATOR,
+            "best_corr_idx": NO_BEST_CORR_IDX,
             "error_message": str(e),
         }
         return result_dict, {}
@@ -161,11 +163,11 @@ def _get_activation_function(name: str):
     the same (function, derivative) tuple expected by CandidateUnit.
     """
     activations = {
-        "sigmoid": (torch.sigmoid, lambda x: torch.sigmoid(x) * (1 - torch.sigmoid(x))),
-        "tanh": (torch.tanh, lambda x: 1 - torch.tanh(x) ** 2),
-        "relu": (torch.relu, lambda x: (x > 0).float()),
+        ACTIVATION_SIGMOID: (torch.sigmoid, lambda x: torch.sigmoid(x) * (1 - torch.sigmoid(x))),
+        ACTIVATION_TANH: (torch.tanh, lambda x: 1 - torch.tanh(x) ** 2),
+        ACTIVATION_RELU: (torch.relu, lambda x: (x > 0).float()),
     }
     if name not in activations:
-        logger.warning("Unknown activation '%s', falling back to sigmoid", name)
-        name = "sigmoid"
+        logger.warning("Unknown activation '%s', falling back to %s", name, DEFAULT_ACTIVATION)
+        name = DEFAULT_ACTIVATION
     return activations[name]

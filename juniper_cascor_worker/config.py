@@ -3,6 +3,36 @@
 import os
 from dataclasses import dataclass
 
+from juniper_cascor_worker.constants import (
+    DEFAULT_HEARTBEAT_INTERVAL,
+    DEFAULT_MANAGER_HOST,
+    DEFAULT_MANAGER_PORT,
+    DEFAULT_MP_CONTEXT,
+    DEFAULT_NUM_WORKERS,
+    DEFAULT_RECONNECT_BACKOFF_BASE,
+    DEFAULT_RECONNECT_BACKOFF_MAX,
+    DEFAULT_STOP_TIMEOUT,
+    DEFAULT_TASK_QUEUE_TIMEOUT,
+    DEFAULT_TASK_TIMEOUT,
+    ENV_API_KEY,
+    ENV_AUTH_TOKEN,
+    ENV_AUTHKEY,
+    ENV_HEARTBEAT_INTERVAL,
+    ENV_MANAGER_HOST,
+    ENV_MANAGER_PORT,
+    ENV_MP_CONTEXT,
+    ENV_NUM_WORKERS,
+    ENV_SERVER_URL,
+    ENV_TASK_TIMEOUT,
+    ENV_TLS_CA,
+    ENV_TLS_CERT,
+    ENV_TLS_KEY,
+    MAX_PORT,
+    MIN_NUM_WORKERS,
+    MIN_PORT,
+    VALID_MP_CONTEXTS,
+    VALID_WS_SCHEMES,
+)
 from juniper_cascor_worker.exceptions import WorkerConfigError
 
 
@@ -37,22 +67,22 @@ class WorkerConfig:
     # WebSocket mode configuration
     server_url: str = ""
     auth_token: str = ""
-    heartbeat_interval: float = 10.0
-    reconnect_backoff_base: float = 1.0
-    reconnect_backoff_max: float = 60.0
-    task_timeout: float = 3600.0
+    heartbeat_interval: float = DEFAULT_HEARTBEAT_INTERVAL
+    reconnect_backoff_base: float = DEFAULT_RECONNECT_BACKOFF_BASE
+    reconnect_backoff_max: float = DEFAULT_RECONNECT_BACKOFF_MAX
+    task_timeout: float = DEFAULT_TASK_TIMEOUT
     tls_cert: str | None = None
     tls_key: str | None = None
     tls_ca: str | None = None
 
     # Legacy BaseManager configuration
-    manager_host: str = "127.0.0.1"
-    manager_port: int = 50000
+    manager_host: str = DEFAULT_MANAGER_HOST
+    manager_port: int = DEFAULT_MANAGER_PORT
     authkey: str = ""
-    num_workers: int = 1
-    task_queue_timeout: float = 5.0
-    stop_timeout: int = 10
-    mp_context: str = "forkserver"
+    num_workers: int = DEFAULT_NUM_WORKERS
+    task_queue_timeout: float = DEFAULT_TASK_QUEUE_TIMEOUT
+    stop_timeout: int = DEFAULT_STOP_TIMEOUT
+    mp_context: str = DEFAULT_MP_CONTEXT
 
     @classmethod
     def from_env(cls) -> "WorkerConfig":
@@ -76,18 +106,18 @@ class WorkerConfig:
             CASCOR_MP_CONTEXT: Multiprocessing context (default: forkserver)
         """
         return cls(
-            server_url=os.getenv("CASCOR_SERVER_URL", ""),
-            auth_token=os.getenv("CASCOR_AUTH_TOKEN") or os.getenv("CASCOR_API_KEY", ""),
-            heartbeat_interval=float(os.getenv("CASCOR_HEARTBEAT_INTERVAL", "10.0")),
-            task_timeout=float(os.getenv("CASCOR_TASK_TIMEOUT", "3600.0")),
-            tls_cert=os.getenv("CASCOR_TLS_CERT"),
-            tls_key=os.getenv("CASCOR_TLS_KEY"),
-            tls_ca=os.getenv("CASCOR_TLS_CA"),
-            manager_host=os.getenv("CASCOR_MANAGER_HOST", "127.0.0.1"),
-            manager_port=int(os.getenv("CASCOR_MANAGER_PORT", "50000")),
-            authkey=os.getenv("CASCOR_AUTHKEY", ""),
-            num_workers=int(os.getenv("CASCOR_NUM_WORKERS", "1")),
-            mp_context=os.getenv("CASCOR_MP_CONTEXT", "forkserver"),
+            server_url=os.getenv(ENV_SERVER_URL, ""),
+            auth_token=os.getenv(ENV_AUTH_TOKEN) or os.getenv(ENV_API_KEY, ""),
+            heartbeat_interval=float(os.getenv(ENV_HEARTBEAT_INTERVAL, str(DEFAULT_HEARTBEAT_INTERVAL))),
+            task_timeout=float(os.getenv(ENV_TASK_TIMEOUT, str(DEFAULT_TASK_TIMEOUT))),
+            tls_cert=os.getenv(ENV_TLS_CERT),
+            tls_key=os.getenv(ENV_TLS_KEY),
+            tls_ca=os.getenv(ENV_TLS_CA),
+            manager_host=os.getenv(ENV_MANAGER_HOST, DEFAULT_MANAGER_HOST),
+            manager_port=int(os.getenv(ENV_MANAGER_PORT, str(DEFAULT_MANAGER_PORT))),
+            authkey=os.getenv(ENV_AUTHKEY, ""),
+            num_workers=int(os.getenv(ENV_NUM_WORKERS, str(DEFAULT_NUM_WORKERS))),
+            mp_context=os.getenv(ENV_MP_CONTEXT, DEFAULT_MP_CONTEXT),
         )
 
     def validate(self, legacy: bool = False) -> None:
@@ -99,17 +129,17 @@ class WorkerConfig:
         """
         if legacy:
             if not self.authkey:
-                raise WorkerConfigError("authkey is required — set CASCOR_AUTHKEY or pass --authkey")
-            if self.num_workers < 1:
-                raise WorkerConfigError(f"num_workers must be >= 1, got {self.num_workers}")
-            if self.manager_port < 1 or self.manager_port > 65535:
-                raise WorkerConfigError(f"manager_port must be 1-65535, got {self.manager_port}")
-            if self.mp_context not in ("forkserver", "spawn", "fork"):
+                raise WorkerConfigError(f"authkey is required — set {ENV_AUTHKEY} or pass --authkey")
+            if self.num_workers < MIN_NUM_WORKERS:
+                raise WorkerConfigError(f"num_workers must be >= {MIN_NUM_WORKERS}, got {self.num_workers}")
+            if self.manager_port < MIN_PORT or self.manager_port > MAX_PORT:
+                raise WorkerConfigError(f"manager_port must be {MIN_PORT}-{MAX_PORT}, got {self.manager_port}")
+            if self.mp_context not in VALID_MP_CONTEXTS:
                 raise WorkerConfigError(f"Invalid mp_context: {self.mp_context}")
         else:
             if not self.server_url:
-                raise WorkerConfigError("server_url is required — set CASCOR_SERVER_URL or pass --server-url")
-            if not self.server_url.startswith(("ws://", "wss://")):
+                raise WorkerConfigError(f"server_url is required — set {ENV_SERVER_URL} or pass --server-url")
+            if not self.server_url.startswith(VALID_WS_SCHEMES):
                 raise WorkerConfigError(f"server_url must start with ws:// or wss://, got: {self.server_url}")
             if self.heartbeat_interval <= 0:
                 raise WorkerConfigError(f"heartbeat_interval must be > 0, got {self.heartbeat_interval}")

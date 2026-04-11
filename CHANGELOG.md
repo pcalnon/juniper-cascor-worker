@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New `juniper_cascor_worker/constants.py` module centralizing wire-protocol message-type discriminators (`MSG_TYPE_*`), binary-frame header format (`BINARY_FRAME_*`), auth header / env var names (`AUTH_*`, `ENV_*`), and worker tuning defaults previously embedded as inline literals across `worker.py`, `task_executor.py`, `ws_connection.py`, `config.py`, and `cli.py`.
+
+### Changed
+
+- All five worker-package modules now import from `juniper_cascor_worker.constants` instead of embedding literals (~70 replacements total).
+- `MSG_TYPE_*` and `BINARY_FRAME_*` constants are guaranteed bit-identical to the cascor server's `MessageType(StrEnum)` and `BinaryFrame` struct format — verified by Wave 5 cross-repo alignment checks. Drift here would silently break worker/server connectivity.
+- `AGENTS.md` gained a new "Constants" section documenting categories, server alignment, and contribution rules.
+
+### Notes
+
+- No public API changes; `WorkerConfig`, `CascorWorkerAgent`, `CandidateTrainingWorker`, CLI flags, and exception hierarchy are all unchanged.
+- All 130 existing tests pass without modification; pre-commit (22 hooks) is clean.
+
 ## [0.3.0] - 2026-04-08
 
 **Summary**: WebSocket-based worker rewrite — `CascorWorkerAgent` replaces `CandidateTrainingWorker` as the default operating mode. Auth token rename, TLS/mTLS support, Docker and systemd deployment infrastructure, and continued security hardening.
