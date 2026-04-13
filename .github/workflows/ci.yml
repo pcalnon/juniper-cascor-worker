@@ -178,7 +178,7 @@ jobs:
           python -m coverage report --fail-under=${COVERAGE_FAIL_UNDER}
 
       - name: Upload Coverage Artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         if: always()
         with:
           name: coverage-report-py${{ matrix.python-version }}
@@ -188,7 +188,7 @@ jobs:
           retention-days: 30
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         if: always()
         with:
           name: unit-test-results-py${{ matrix.python-version }}
@@ -233,7 +233,7 @@ jobs:
           twine check dist/*
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: build-artifacts
           path: dist/
@@ -280,7 +280,7 @@ jobs:
           bash scripts/generate_dep_docs.sh
 
       - name: Upload Dependency Documentation
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: dependency-docs
           path: |
@@ -361,7 +361,7 @@ jobs:
             || (echo "::error::Critical/High vulnerabilities found in dependencies" && exit 1)
 
       - name: Upload Security Reports
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         if: always()
         with:
           name: security-reports
