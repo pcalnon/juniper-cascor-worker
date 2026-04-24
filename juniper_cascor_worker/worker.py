@@ -327,14 +327,52 @@ def _encode_binary_frame(array: np.ndarray) -> bytes:
     return header + arr.tobytes()
 
 
+# SEC-18: Bounds for attacker-controlled binary-frame headers. A crafted
+# frame could otherwise make ``np.frombuffer().reshape(shape)`` attempt a
+# huge allocation and exhaust worker memory. The limits here are generous
+# enough for realistic CasCor tensor shapes (ndim<=10, ~100M elements,
+# dtype strings like "complex128") while still shutting the door on DoS.
+BINARY_FRAME_MAX_NDIM = 10
+BINARY_FRAME_MAX_TOTAL_ELEMENTS = 100_000_000
+BINARY_FRAME_MAX_DTYPE_LEN = 32
+
+
+class BinaryFrameProtocolError(Exception):
+    """Raised when a binary frame header violates declared bounds."""
+
+
 def _decode_binary_frame(data: bytes) -> np.ndarray:
-    """Decode a binary frame into a numpy array (matches Phase 1b BinaryFrame.decode)."""
+    """Decode a binary frame into a numpy array (matches Phase 1b BinaryFrame.decode).
+
+    Validates every attacker-controlled field in the header (ndim, shape
+    extents, dtype length) before calling ``np.frombuffer`` so a malformed
+    or malicious frame cannot trigger an OOM allocation (SEC-18).
+    """
     offset = 0
     (ndim,) = struct.unpack_from(BINARY_FRAME_HEADER_LENGTH_FORMAT, data, offset)
+    if ndim < 0 or ndim > BINARY_FRAME_MAX_NDIM:
+        raise BinaryFrameProtocolError(
+            f"binary frame ndim={ndim} exceeds maximum {BINARY_FRAME_MAX_NDIM}"
+        )
     offset += BINARY_FRAME_HEADER_LENGTH_BYTES
     shape = struct.unpack_from(f"<{ndim}I", data, offset)
     offset += ndim * BINARY_FRAME_HEADER_LENGTH_BYTES
+
+    total_elements = 1
+    for dim in shape:
+        if dim < 0:
+            raise BinaryFrameProtocolError(f"binary frame shape dimension negative: {dim}")
+        total_elements *= dim
+        if total_elements > BINARY_FRAME_MAX_TOTAL_ELEMENTS:
+            raise BinaryFrameProtocolError(
+                f"binary frame total_elements>{BINARY_FRAME_MAX_TOTAL_ELEMENTS} (shape={shape})"
+            )
+
     (dtype_len,) = struct.unpack_from(BINARY_FRAME_HEADER_LENGTH_FORMAT, data, offset)
+    if dtype_len < 0 or dtype_len > BINARY_FRAME_MAX_DTYPE_LEN:
+        raise BinaryFrameProtocolError(
+            f"binary frame dtype_len={dtype_len} exceeds maximum {BINARY_FRAME_MAX_DTYPE_LEN}"
+        )
     offset += BINARY_FRAME_HEADER_LENGTH_BYTES
     dtype_str = data[offset : offset + dtype_len].decode(BINARY_FRAME_DTYPE_ENCODING)
     offset += dtype_len
