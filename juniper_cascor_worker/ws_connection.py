@@ -13,7 +13,7 @@ from typing import Any
 import websockets
 from websockets.asyncio.client import ClientConnection
 
-from juniper_cascor_worker.constants import AUTH_HEADER_NAME, DEFAULT_RECONNECT_BACKOFF_BASE, DEFAULT_RECONNECT_BACKOFF_MAX, WEBSOCKET_STATE_OPEN, WS_SCHEME_SECURE
+from juniper_cascor_worker.constants import AUTH_HEADER_NAME, DEFAULT_RECONNECT_BACKOFF_BASE, DEFAULT_RECONNECT_BACKOFF_MAX, MAX_JSON_ERROR_PREVIEW_LENGTH, WEBSOCKET_STATE_OPEN, WS_SCHEME_SECURE
 from juniper_cascor_worker.exceptions import WorkerConnectionError
 
 logger = logging.getLogger(__name__)
@@ -181,7 +181,15 @@ class WorkerConnection:
         msg = await self.receive()
         if isinstance(msg, bytes):
             raise WorkerConnectionError("Expected text message, got binary")
-        return json.loads(msg)
+        # CW-01/CW-06 (Phase 4C): catch malformed JSON from server and raise
+        # WorkerConnectionError instead of letting json.JSONDecodeError escape
+        # uncaught. This applies to both task-message and registration-response
+        # paths since both call receive_json().
+        try:
+            return json.loads(msg)
+        except json.JSONDecodeError as e:
+            preview = msg[:MAX_JSON_ERROR_PREVIEW_LENGTH] if msg else ""
+            raise WorkerConnectionError(f"Malformed JSON from server: {e}: {preview!r}") from e
 
     async def receive_bytes(self) -> bytes:
         """Receive a binary frame.
