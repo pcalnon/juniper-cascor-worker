@@ -351,9 +351,7 @@ def _decode_binary_frame(data: bytes) -> np.ndarray:
     offset = 0
     (ndim,) = struct.unpack_from(BINARY_FRAME_HEADER_LENGTH_FORMAT, data, offset)
     if ndim < 0 or ndim > BINARY_FRAME_MAX_NDIM:
-        raise BinaryFrameProtocolError(
-            f"binary frame ndim={ndim} exceeds maximum {BINARY_FRAME_MAX_NDIM}"
-        )
+        raise BinaryFrameProtocolError(f"binary frame ndim={ndim} exceeds maximum {BINARY_FRAME_MAX_NDIM}")
     offset += BINARY_FRAME_HEADER_LENGTH_BYTES
     shape = struct.unpack_from(f"<{ndim}I", data, offset)
     offset += ndim * BINARY_FRAME_HEADER_LENGTH_BYTES
@@ -364,15 +362,11 @@ def _decode_binary_frame(data: bytes) -> np.ndarray:
             raise BinaryFrameProtocolError(f"binary frame shape dimension negative: {dim}")
         total_elements *= dim
         if total_elements > BINARY_FRAME_MAX_TOTAL_ELEMENTS:
-            raise BinaryFrameProtocolError(
-                f"binary frame total_elements>{BINARY_FRAME_MAX_TOTAL_ELEMENTS} (shape={shape})"
-            )
+            raise BinaryFrameProtocolError(f"binary frame total_elements>{BINARY_FRAME_MAX_TOTAL_ELEMENTS} (shape={shape})")
 
     (dtype_len,) = struct.unpack_from(BINARY_FRAME_HEADER_LENGTH_FORMAT, data, offset)
     if dtype_len < 0 or dtype_len > BINARY_FRAME_MAX_DTYPE_LEN:
-        raise BinaryFrameProtocolError(
-            f"binary frame dtype_len={dtype_len} exceeds maximum {BINARY_FRAME_MAX_DTYPE_LEN}"
-        )
+        raise BinaryFrameProtocolError(f"binary frame dtype_len={dtype_len} exceeds maximum {BINARY_FRAME_MAX_DTYPE_LEN}")
     offset += BINARY_FRAME_HEADER_LENGTH_BYTES
     dtype_str = data[offset : offset + dtype_len].decode(BINARY_FRAME_DTYPE_ENCODING)
     offset += dtype_len
