@@ -178,6 +178,28 @@ class TestReceive:
         with pytest.raises(WorkerConnectionError, match="Expected binary message, got text"):
             await conn.receive_bytes()
 
+    @pytest.mark.asyncio
+    async def test_receive_json_malformed_raises(self):
+        """Malformed JSON -> WorkerConnectionError (CW-01, Phase 4C)."""
+        mock_ws = _make_mock_ws()
+        mock_ws.recv.return_value = '{"type": "registration_ack", "status":'
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers")
+        conn._ws = mock_ws
+
+        with pytest.raises(WorkerConnectionError, match="Malformed JSON from server"):
+            await conn.receive_json()
+
+    @pytest.mark.asyncio
+    async def test_receive_json_empty_string_raises(self):
+        """Empty string -> WorkerConnectionError (CW-01, Phase 4C)."""
+        mock_ws = _make_mock_ws()
+        mock_ws.recv.return_value = ""
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers")
+        conn._ws = mock_ws
+
+        with pytest.raises(WorkerConnectionError, match="Malformed JSON from server"):
+            await conn.receive_json()
+
 
 @pytest.mark.unit
 class TestClose:
