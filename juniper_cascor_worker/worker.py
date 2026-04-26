@@ -28,7 +28,25 @@ if TYPE_CHECKING:
 import numpy as np
 
 from juniper_cascor_worker.config import WorkerConfig
-from juniper_cascor_worker.constants import BINARY_FRAME_DTYPE_ENCODING, BINARY_FRAME_HEADER_LENGTH_BYTES, BINARY_FRAME_HEADER_LENGTH_FORMAT, DEFAULT_CORRELATION, DEFAULT_DENOMINATOR, DEFAULT_NUMERATOR, MAX_JSON_ERROR_PREVIEW_LENGTH, MSG_TYPE_CONNECTION_ESTABLISHED, MSG_TYPE_ERROR, MSG_TYPE_HEARTBEAT, MSG_TYPE_REGISTER, MSG_TYPE_REGISTRATION_ACK, MSG_TYPE_RESULT_ACK, MSG_TYPE_TASK_ASSIGN, MSG_TYPE_TASK_RESULT, NO_BEST_CORR_IDX, NO_EPOCHS_COMPLETED
+from juniper_cascor_worker.constants import (
+    BINARY_FRAME_DTYPE_ENCODING,
+    BINARY_FRAME_HEADER_LENGTH_BYTES,
+    BINARY_FRAME_HEADER_LENGTH_FORMAT,
+    DEFAULT_CORRELATION,
+    DEFAULT_DENOMINATOR,
+    DEFAULT_NUMERATOR,
+    MAX_JSON_ERROR_PREVIEW_LENGTH,
+    MSG_TYPE_CONNECTION_ESTABLISHED,
+    MSG_TYPE_ERROR,
+    MSG_TYPE_HEARTBEAT,
+    MSG_TYPE_REGISTER,
+    MSG_TYPE_REGISTRATION_ACK,
+    MSG_TYPE_RESULT_ACK,
+    MSG_TYPE_TASK_ASSIGN,
+    MSG_TYPE_TASK_RESULT,
+    NO_BEST_CORR_IDX,
+    NO_EPOCHS_COMPLETED,
+)
 from juniper_cascor_worker.exceptions import WorkerConnectionError, WorkerError
 
 logger = logging.getLogger(__name__)
@@ -311,7 +329,7 @@ def _parse_json(raw: str) -> dict[str, Any] | None:
     """Parse a JSON text message, returning None on failure."""
     try:
         return json.loads(raw)
-    except json.JSONDecodeError, TypeError:
+    except (json.JSONDecodeError, TypeError):
         logger.error("Invalid JSON message: %s", raw[:MAX_JSON_ERROR_PREVIEW_LENGTH] if raw else "")
         return None
 
