@@ -16,12 +16,17 @@ WORKDIR /build
 # Install build tools
 RUN pip install --no-cache-dir --upgrade pip wheel setuptools
 
-# Install CPU-only PyTorch first (avoids pulling CUDA which is ~4 GB)
+# CW-02 (Phase 4E): use the CPU-only lock to keep the runtime image slim.
+# requirements-cpu.lock excludes torch (we install the CPU wheel separately
+# from the PyTorch CPU index below) and the entire NVIDIA/CUDA transitive
+# stack that ``requirements.lock`` pins for GPU dev environments — saving
+# ~2-4 GB of image bloat. The companion ``requirements.lock`` is preserved
+# for non-Docker developer installs that may want full GPU support.
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
 # Install pinned dependencies from lockfile (best layer caching)
-COPY requirements.lock ./
-RUN pip install --no-cache-dir -r requirements.lock
+COPY requirements-cpu.lock ./
+RUN pip install --no-cache-dir -r requirements-cpu.lock
 
 # Copy project files and install without deps (already installed above)
 COPY pyproject.toml README.md LICENSE ./

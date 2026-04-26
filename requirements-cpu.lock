@@ -1,0 +1,44 @@
+# CPU-only lock for juniper-cascor-worker (Phase 4E, CW-02).
+#
+# This lock pins everything the worker needs EXCEPT torch, which the
+# Dockerfile installs separately from the official PyTorch CPU index
+# (https://download.pytorch.org/whl/cpu) so we avoid the ~2-4 GB of NVIDIA
+# CUDA wheels that the GPU lock would otherwise pull in transitively.
+#
+# Regeneration command:
+#   echo "torch==2.10.0+cpu" > /tmp/torch-cpu-override
+#   uv pip compile pyproject.toml \
+#     --no-emit-package torch \
+#     --override /tmp/torch-cpu-override \
+#     -o requirements-cpu.lock
+#
+# Bump the torch pin in the override file when upgrading torch; everything
+# else flows through to the lock automatically.
+#
+# Companion lock with full NVIDIA stack: ``requirements.lock`` (preserved
+# as the legacy default for dev/laptop GPU installs).
+filelock==3.25.2
+    # via torch
+fsspec==2026.2.0
+    # via torch
+jinja2==3.1.6
+    # via torch
+markupsafe==3.0.3
+    # via jinja2
+mpmath==1.3.0
+    # via sympy
+networkx==3.6.1
+    # via torch
+numpy==2.4.3
+    # via juniper-cascor-worker (pyproject.toml)
+setuptools==70.2.0
+    # via torch
+sympy==1.14.0
+    # via torch
+typing-extensions==4.15.0
+    # via torch
+websockets==16.0
+    # via juniper-cascor-worker (pyproject.toml)
+
+# The following packages were excluded from the output:
+# torch
