@@ -311,7 +311,7 @@ def _parse_json(raw: str) -> dict[str, Any] | None:
     """Parse a JSON text message, returning None on failure."""
     try:
         return json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
+    except json.JSONDecodeError, TypeError:
         logger.error("Invalid JSON message: %s", raw[:MAX_JSON_ERROR_PREVIEW_LENGTH] if raw else "")
         return None
 
