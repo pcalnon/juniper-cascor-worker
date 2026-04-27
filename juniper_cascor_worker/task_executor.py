@@ -3,17 +3,55 @@
 Imports CandidateUnit from the cascor codebase (must be on sys.path)
 and trains candidates using structured data received via the wire protocol.
 Returns results as dicts + numpy tensors — no pickle involved.
+
+CW-05 (Phase 4E, interim — Approach B):
+    The CandidateUnit type is sourced via a runtime ``sys.path``-resolved
+    import (``from candidate_unit.candidate_unit import CandidateUnit``).
+    This is a known cross-repo coupling — see the roadmap's CW-05 entry. The
+    canonical fix (Approach A) is to publish ``juniper-cascor-core`` as a
+    proper PyPI package with the shared types so the worker can declare a
+    pinned dependency. That work is deferred; in the meantime, all dynamic
+    imports are routed through ``_get_candidate_unit_class`` so there is a
+    single, well-documented integration seam.
+
+CW-08 (Phase 4E):
+    ``import torch`` was previously at module level. Importing torch costs
+    2-5 s on first call and was paid up front whenever the worker process
+    started, even if no task ever arrived. Torch is now imported lazily
+    inside the functions that actually need it; once imported it is cached
+    in ``sys.modules`` so subsequent calls are essentially free.
 """
 
 import logging
 from typing import Any
 
 import numpy as np
-import torch
 
 from juniper_cascor_worker.constants import ACTIVATION_RELU, ACTIVATION_SIGMOID, ACTIVATION_TANH, CANDIDATE_UNIT_LOG_LEVEL, DEFAULT_ACTIVATION, DEFAULT_CORRELATION, DEFAULT_DENOMINATOR, DEFAULT_DISPLAY_FREQUENCY, DEFAULT_LEARNING_RATE, DEFAULT_NUMERATOR, DEFAULT_RANDOM_MAX_VALUE, DEFAULT_RANDOM_VALUE_SCALE, DEFAULT_SEQUENCE_MAX_VALUE, DEFAULT_TRAINING_EPOCHS, NO_BEST_CORR_IDX, NO_EPOCHS_COMPLETED
 
 logger = logging.getLogger(__name__)
+
+
+def _get_candidate_unit_class() -> Any:
+    """Resolve the cascor ``CandidateUnit`` class via runtime import (CW-05).
+
+    Centralises the sys.path-based import used to bridge the worker process
+    to the cascor codebase. Raises ``ImportError`` with a clear, actionable
+    message if the cascor source tree is not importable; this is the single
+    place to update when CW-05 Approach A (juniper-cascor-core PyPI package)
+    is implemented and the runtime import can be replaced with a normal
+    package dependency.
+    """
+    try:
+        from candidate_unit.candidate_unit import CandidateUnit
+    except ImportError as exc:
+        raise ImportError(
+            "CasCor codebase not found. Ensure the JuniperCascor src "
+            "directory is on sys.path via --cascor-path or installed in "
+            "the environment. CW-05 Approach A (juniper-cascor-core "
+            f"package) is the canonical long-term fix. Original error: {exc}"
+        ) from exc
+    return CandidateUnit
 
 
 def execute_training_task(
@@ -42,10 +80,11 @@ def execute_training_task(
     Raises:
         ImportError: If CandidateUnit is not importable (cascor not on sys.path).
     """
-    try:
-        from candidate_unit.candidate_unit import CandidateUnit
-    except ImportError as e:
-        raise ImportError("CasCor codebase not found. Ensure the JuniperCascor src directory " "is on sys.path via --cascor-path. " f"Original error: {e}") from e
+    # CW-08: lazy-load torch to keep worker process startup fast. The first
+    # task pays the ~2-5s import cost; subsequent tasks hit the cache.
+    import torch
+
+    CandidateUnit = _get_candidate_unit_class()
 
     candidate_index = candidate_data.get("candidate_index", 0)
     candidate_uuid = candidate_data.get("candidate_uuid", "")
@@ -161,7 +200,14 @@ def _get_activation_function(name: str):
 
     Mirrors CascadeCorrelationNetwork._get_activation_function() to produce
     the same (function, derivative) tuple expected by CandidateUnit.
+
+    CW-08: torch is imported lazily here so that simply importing
+    ``task_executor`` (e.g. for type hints or test collection) does not pay
+    the torch import cost. The first call into this helper triggers the
+    import; subsequent calls reuse the cached module from ``sys.modules``.
     """
+    import torch
+
     activations = {
         ACTIVATION_SIGMOID: (torch.sigmoid, lambda x: torch.sigmoid(x) * (1 - torch.sigmoid(x))),
         ACTIVATION_TANH: (torch.tanh, lambda x: 1 - torch.tanh(x) ** 2),

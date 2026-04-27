@@ -216,17 +216,59 @@ class CascorWorkerAgent:
         task_id = msg.get("task_id", "")
         manifest = msg.get("tensor_manifest", {})
 
+        # CW-07: validate that the manifest declares the tensors the
+        # task_executor depends on before we start blocking on
+        # ``receive_bytes()``. A malformed manifest would otherwise leave the
+        # worker waiting on frames that never arrive (silent deadlock) or
+        # raise a late ``KeyError`` once execution reaches
+        # ``tensors["candidate_input"]``. Failing fast here lets us surface a
+        # clear protocol violation back to the server.
+        candidate_data = msg.get("candidate_data", {})
+        candidate_data["candidate_index"] = msg.get("candidate_index", 0)
+        manifest_validation_error = _validate_tensor_manifest(manifest)
+        if manifest_validation_error is not None:
+            logger.error("Tensor manifest invalid for task %s: %s", task_id, manifest_validation_error)
+            await self._connection.send_json(
+                _build_task_failure_message(
+                    task_id=task_id,
+                    candidate_data=candidate_data,
+                    error_message=f"Tensor manifest invalid: {manifest_validation_error}",
+                )
+            )
+            return
+
         # Receive binary tensor frames
         tensors: dict[str, np.ndarray] = {}
         for tensor_name in manifest:
             raw_bytes = await self._connection.receive_bytes()
             tensors[tensor_name] = _decode_binary_frame(raw_bytes)
 
+        # CW-07 (defence-in-depth): once decoded, verify the populated tensor
+        # set still matches the declared manifest. This will only flag a
+        # mismatch if the receive loop above is ever changed to short-circuit
+        # — but the cost is negligible and the assertion documents the
+        # invariant explicitly.
+        missing = set(manifest.keys()) - set(tensors.keys())
+        extra = set(tensors.keys()) - set(manifest.keys())
+        if missing or extra:
+            logger.error(
+                "Tensor manifest/frame mismatch for task %s: missing=%s extra=%s",
+                task_id,
+                sorted(missing),
+                sorted(extra),
+            )
+            await self._connection.send_json(
+                _build_task_failure_message(
+                    task_id=task_id,
+                    candidate_data=candidate_data,
+                    error_message=f"Tensor manifest/frame mismatch: missing={sorted(missing)} extra={sorted(extra)}",
+                )
+            )
+            return
+
         logger.info("Received task %s (%d tensors)", task_id, len(tensors))
 
         # Execute training in a thread to avoid blocking the event loop
-        candidate_data = msg.get("candidate_data", {})
-        candidate_data["candidate_index"] = msg.get("candidate_index", 0)
         training_params = msg.get("training_params", {})
 
         try:
@@ -236,11 +278,15 @@ class CascorWorkerAgent:
             )
         except asyncio.TimeoutError:
             logger.error("Task %s timed out after %.0fs", task_id, self.config.task_timeout)
+            # CW-04: thread the actual candidate_uuid through so the server can
+            # correlate the timeout error with the assigned candidate. The
+            # previous code unconditionally sent ``""`` which broke server-side
+            # correlation logging.
             error_msg = {
                 "type": MSG_TYPE_TASK_RESULT,
                 "task_id": task_id,
                 "candidate_id": candidate_data.get("candidate_index", 0),
-                "candidate_uuid": "",
+                "candidate_uuid": candidate_data.get("candidate_uuid", ""),
                 "correlation": DEFAULT_CORRELATION,
                 "success": False,
                 "epochs_completed": NO_EPOCHS_COMPLETED,
@@ -332,6 +378,63 @@ def _parse_json(raw: str) -> dict[str, Any] | None:
     except (json.JSONDecodeError, TypeError):
         logger.error("Invalid JSON message: JSON Decode or Type Error: %s", raw[:MAX_JSON_ERROR_PREVIEW_LENGTH] if raw else "")
     return None
+
+
+# CW-07: tensor names the task executor unconditionally dereferences via
+# ``tensors[name]``. Any task_assign manifest that omits one of these is a
+# protocol violation and will deadlock or KeyError if accepted blindly.
+REQUIRED_TENSOR_NAMES: tuple[str, ...] = ("candidate_input", "residual_error")
+
+
+def _validate_tensor_manifest(manifest: Any) -> str | None:
+    """Validate a ``tensor_manifest`` payload, returning an error string or None.
+
+    CW-07 (Phase 4E): the cascor server sends a tensor_manifest dict
+    declaring the binary frames it intends to follow with. If the manifest is
+    not a dict, is empty, or omits a required tensor name, the worker has no
+    safe way to receive frames and must reject the task instead of blocking
+    forever on ``receive_bytes()``.
+    """
+    if not isinstance(manifest, dict):
+        return f"manifest is not a dict (got {type(manifest).__name__})"
+    if not manifest:
+        return "manifest is empty"
+    missing_required = [name for name in REQUIRED_TENSOR_NAMES if name not in manifest]
+    if missing_required:
+        return f"manifest missing required tensor(s): {missing_required}"
+    return None
+
+
+def _build_task_failure_message(
+    *,
+    task_id: str,
+    candidate_data: dict[str, Any],
+    error_message: str,
+) -> dict[str, Any]:
+    """Build a ``task_result`` payload describing a pre-execution failure.
+
+    Centralises the failure envelope used when the worker rejects a task
+    before any training runs (e.g. invalid manifest, CW-07). Mirrors the
+    timeout-path payload so the server sees a consistent shape regardless of
+    where the failure originated, and threads through the actual
+    ``candidate_uuid`` so failures can be correlated server-side (CW-04).
+    """
+    return {
+        "type": MSG_TYPE_TASK_RESULT,
+        "task_id": task_id,
+        "candidate_id": candidate_data.get("candidate_index", 0),
+        "candidate_uuid": candidate_data.get("candidate_uuid", ""),
+        "correlation": DEFAULT_CORRELATION,
+        "success": False,
+        "epochs_completed": NO_EPOCHS_COMPLETED,
+        "activation_name": candidate_data.get("activation_name", ""),
+        "all_correlations": [],
+        "numerator": DEFAULT_NUMERATOR,
+        "denominator": DEFAULT_DENOMINATOR,
+        "best_corr_idx": NO_BEST_CORR_IDX,
+        "error_message": error_message,
+        "tensor_manifest": {},
+    }
 
 
 def _encode_binary_frame(array: np.ndarray) -> bytes:
