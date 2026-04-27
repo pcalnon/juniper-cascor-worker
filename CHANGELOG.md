@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **METRICS-MON R1.3 / seed-04**: HTTP health-probe surface for the worker.
+  - New `juniper_cascor_worker/http_health.py` module — `HealthServer` class hand-rolled on `asyncio.start_server` (no new dependencies; FastAPI/uvicorn deliberately not added to the slim worker image). Hosts three GET endpoints on a configurable port (default `8210`, localhost-only):
+    - `GET /v1/health` — backwards-compatible no-op (`{"status": "ok", "worker_id": ..., "version": ...}`, 200).
+    - `GET /v1/health/live` — runs an in-process tick (WS connection bound + heartbeat counter fresh) within a 250 ms budget; 503 + `{"status": "unresponsive", ...}` on tick failure or budget exceedance.
+    - `GET /v1/health/ready` — required deps are WS connected AND registration handshake complete; 503 + `status="not_ready"` + `X-Juniper-Readiness` header otherwise.
+  - Hand-rolled HTTP/1.1 handler accepts `GET` only, caps total request bytes at 4096, applies a 2 s read timeout, rejects malformed request lines and oversize headers, and survives bad requests without crashing the listener.
+  - **Enriched heartbeat payload** (`MSG_TYPE_HEARTBEAT`): now sends `in_flight_tasks`, `last_task_completed_at`, `rss_mb`, `tasks_completed`, `tasks_failed` alongside the existing `worker_id` + `timestamp`. Cascor's `WorkerRegistration` accepts these (see companion juniper-cascor PR) and surfaces them on `/v1/workers`.
+  - **Task accounting** wired around `_handle_task_assign`: `try/finally` increments `in_flight_tasks` at start, decrements at end, sets `last_task_completed_at = time.time()`, and increments `tasks_completed` on training success or `tasks_failed` on protocol rejection / timeout / exception. Liveness counter bumps on each task completion AND each heartbeat send so progress in the message-loop thread is an additional liveness signal.
+  - **Config**: new `health_port` and `health_bind` fields on `WorkerConfig` (defaults `8210` / `127.0.0.1`); env vars `CASCOR_WORKER_HEALTH_PORT` and `CASCOR_WORKER_HEALTH_BIND`. Validation ensures port is in `[1, 65535]` and bind host is non-empty.
+  - **Cross-platform `rss_mb` sampling**: Linux uses `ru_maxrss / 1024` (kilobytes → MB); macOS uses `ru_maxrss / 1024**2` (bytes → MB). Falls back to `0.0` on platforms without `resource` (e.g. Windows). No `psutil` dependency.
+  - See [`notes/code-review/METRICS_MONITORING_R1.3_WORKER_HEARTBEAT_DESIGN_2026-04-27.md`](https://github.com/pcalnon/juniper-ml/blob/main/notes/code-review/METRICS_MONITORING_R1.3_WORKER_HEARTBEAT_DESIGN_2026-04-27.md) in juniper-ml for the cross-repo contract. Companion PRs: cascor (merged) and juniper-deploy (forthcoming, two-step rollout — chart adds the wiring with `worker.healthcheck.enabled=false` first, flag flip after staging burn-in).
 - New `juniper_cascor_worker/constants.py` module centralizing wire-protocol message-type discriminators (`MSG_TYPE_*`), binary-frame header format (`BINARY_FRAME_*`), auth header / env var names (`AUTH_*`, `ENV_*`), and worker tuning defaults previously embedded as inline literals across `worker.py`, `task_executor.py`, `ws_connection.py`, `config.py`, and `cli.py`.
 
 ### Changed
