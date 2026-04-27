@@ -23,30 +23,13 @@ from multiprocessing.context import BaseContext
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 if TYPE_CHECKING:
+    from juniper_cascor_worker.http_health import HealthServer
     from juniper_cascor_worker.ws_connection import WorkerConnection
 
 import numpy as np
 
 from juniper_cascor_worker.config import WorkerConfig
-from juniper_cascor_worker.constants import (
-    BINARY_FRAME_DTYPE_ENCODING,
-    BINARY_FRAME_HEADER_LENGTH_BYTES,
-    BINARY_FRAME_HEADER_LENGTH_FORMAT,
-    DEFAULT_CORRELATION,
-    DEFAULT_DENOMINATOR,
-    DEFAULT_NUMERATOR,
-    MAX_JSON_ERROR_PREVIEW_LENGTH,
-    MSG_TYPE_CONNECTION_ESTABLISHED,
-    MSG_TYPE_ERROR,
-    MSG_TYPE_HEARTBEAT,
-    MSG_TYPE_REGISTER,
-    MSG_TYPE_REGISTRATION_ACK,
-    MSG_TYPE_RESULT_ACK,
-    MSG_TYPE_TASK_ASSIGN,
-    MSG_TYPE_TASK_RESULT,
-    NO_BEST_CORR_IDX,
-    NO_EPOCHS_COMPLETED,
-)
+from juniper_cascor_worker.constants import BINARY_FRAME_DTYPE_ENCODING, BINARY_FRAME_HEADER_LENGTH_BYTES, BINARY_FRAME_HEADER_LENGTH_FORMAT, DEFAULT_CORRELATION, DEFAULT_DENOMINATOR, DEFAULT_NUMERATOR, MAX_JSON_ERROR_PREVIEW_LENGTH, MSG_TYPE_CONNECTION_ESTABLISHED, MSG_TYPE_ERROR, MSG_TYPE_HEARTBEAT, MSG_TYPE_REGISTER, MSG_TYPE_REGISTRATION_ACK, MSG_TYPE_RESULT_ACK, MSG_TYPE_TASK_ASSIGN, MSG_TYPE_TASK_RESULT, NO_BEST_CORR_IDX, NO_EPOCHS_COMPLETED
 from juniper_cascor_worker.exceptions import WorkerConnectionError, WorkerError
 
 logger = logging.getLogger(__name__)
@@ -77,6 +60,47 @@ class CascorWorkerAgent:
         self._stop_event = asyncio.Event()
         self._connection: WorkerConnection | None = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        # METRICS-MON R1.3 / seed-04: task accounting + liveness counter for
+        # the enriched heartbeat payload and the HTTP probe tick.
+        self._in_flight_tasks: int = 0
+        self._last_task_completed_at: float | None = None
+        self._tasks_completed: int = 0
+        self._tasks_failed: int = 0
+        self._liveness_counter: int = 0
+        self._liveness_last_tick_at: float = time.monotonic()
+        self._registered: bool = False
+        # The HTTP health server is built lazily in ``run()`` so tests can
+        # construct an agent without binding a port.
+        self._health_server: Optional["HealthServer"] = None
+
+    def _bump_liveness(self) -> None:
+        """Record forward progress for the liveness probe."""
+        self._liveness_counter += 1
+        self._liveness_last_tick_at = time.monotonic()
+
+    def _liveness_tick(self) -> None:
+        """METRICS-MON R1.3 / seed-04: probe-side liveness check.
+
+        Pure in-process work (no awaits, no I/O): WS connection bound and
+        last bump within ``2 * heartbeat_interval`` seconds. Raises on any
+        violation; the HTTP handler converts the exception into 503.
+        """
+        if self._connection is None or not self._connection.connected:
+            raise RuntimeError("websocket connection not bound")
+        stale_after = 2.0 * self.config.heartbeat_interval
+        if (time.monotonic() - self._liveness_last_tick_at) > stale_after:
+            raise RuntimeError(f"heartbeat counter stale (> {stale_after:.1f}s)")
+
+    def _readiness_tick(self) -> None:
+        """METRICS-MON R1.3 / seed-04: probe-side readiness check.
+
+        Required deps: WS connected AND registration handshake complete.
+        Raises with a precise reason; the HTTP handler converts into 503.
+        """
+        if self._connection is None or not self._connection.connected:
+            raise RuntimeError("websocket connection not bound")
+        if not self._registered:
+            raise RuntimeError("worker registration handshake not complete")
 
     async def run(self) -> None:
         """Main entry point — connect, register, and process tasks.
@@ -84,10 +108,33 @@ class CascorWorkerAgent:
         Runs until ``stop()`` is called or the connection is lost
         (with automatic reconnection).
         """
+        from juniper_cascor_worker.http_health import HealthServer
         from juniper_cascor_worker.ws_connection import WorkerConnection
 
         self._loop = asyncio.get_running_loop()
 
+        # METRICS-MON R1.3 / seed-04: bring up the HTTP health server
+        # before we connect to cascor so k8s liveness probes work even
+        # while the WS connection is being established (the tick will
+        # 503 until the connection is up — exactly what the contract
+        # specifies for "not yet ready").
+        self._health_server = HealthServer(
+            liveness_tick=self._liveness_tick,
+            readiness_tick=self._readiness_tick,
+            worker_id_provider=lambda: self.worker_id if self._registered else None,
+            version=_resolve_version(),
+            host=self.config.health_bind,
+            port=self.config.health_port,
+        )
+        await self._health_server.start()
+
+        try:
+            await self._run_inner(WorkerConnection)
+        finally:
+            await self._health_server.stop()
+
+    async def _run_inner(self, WorkerConnection: type) -> None:
+        """Connect/register/process loop, with HTTP probes already up."""
         while not self._stop_event.is_set():
             self._connection = WorkerConnection(
                 server_url=self.config.server_url,
@@ -136,6 +183,10 @@ class CascorWorkerAgent:
             finally:
                 if self._connection:
                     await self._connection.close()
+                # METRICS-MON R1.3 / seed-04: a closed WS means readiness
+                # 503 until the next register-ack lands. Make the flag
+                # cycle visible to the probe layer.
+                self._registered = False
 
         logger.info("Worker agent stopped")
 
@@ -165,10 +216,22 @@ class CascorWorkerAgent:
         if ack.get("type") != MSG_TYPE_REGISTRATION_ACK:
             raise WorkerConnectionError(f"Registration failed: {ack}")
 
+        # METRICS-MON R1.3 / seed-04: readiness anchor — once the ack lands
+        # the worker is eligible to receive tasks.
+        self._registered = True
+        self._bump_liveness()
         logger.info("Registered as worker %s", self.worker_id)
 
     async def _heartbeat_loop(self) -> None:
-        """Send periodic heartbeat messages."""
+        """Send periodic heartbeat messages.
+
+        METRICS-MON R1.3 / seed-04: payload is enriched with
+        ``in_flight_tasks``, ``last_task_completed_at``, ``rss_mb``, and
+        the running task counters so cascor's ``WorkerRegistration`` and
+        ``/v1/workers`` route can surface diagnostic state.
+        """
+        from juniper_cascor_worker.http_health import sample_rss_mb
+
         while not self._stop_event.is_set():
             try:
                 await asyncio.sleep(self.config.heartbeat_interval)
@@ -177,8 +240,15 @@ class CascorWorkerAgent:
                         "type": MSG_TYPE_HEARTBEAT,
                         "worker_id": self.worker_id,
                         "timestamp": time.time(),
+                        # R1.3 enriched fields:
+                        "in_flight_tasks": self._in_flight_tasks,
+                        "last_task_completed_at": self._last_task_completed_at,
+                        "rss_mb": sample_rss_mb(),
+                        "tasks_completed": self._tasks_completed,
+                        "tasks_failed": self._tasks_failed,
                     }
                     await self._connection.send_json(msg)
+                    self._bump_liveness()
             except WorkerConnectionError:
                 break
             except asyncio.CancelledError:
@@ -213,6 +283,26 @@ class CascorWorkerAgent:
 
     async def _handle_task_assign(self, msg: dict[str, Any]) -> None:
         """Handle a task_assign message: receive tensors, train, send result."""
+        # METRICS-MON R1.3 / seed-04: task accounting wraps the entire
+        # task lifecycle — protocol-level rejections, timeouts, and
+        # successful completions all flow through the finally block so
+        # ``in_flight_tasks`` and ``last_task_completed_at`` stay
+        # accurate regardless of where execution exits.
+        self._in_flight_tasks += 1
+        success = False
+        try:
+            success = await self._handle_task_assign_body(msg)
+        finally:
+            self._in_flight_tasks -= 1
+            self._last_task_completed_at = time.time()
+            if success:
+                self._tasks_completed += 1
+            else:
+                self._tasks_failed += 1
+            self._bump_liveness()
+
+    async def _handle_task_assign_body(self, msg: dict[str, Any]) -> bool:
+        """Inner task handler — returns True on training success, False otherwise."""
         task_id = msg.get("task_id", "")
         manifest = msg.get("tensor_manifest", {})
 
@@ -235,7 +325,7 @@ class CascorWorkerAgent:
                     error_message=f"Tensor manifest invalid: {manifest_validation_error}",
                 )
             )
-            return
+            return False
 
         # Receive binary tensor frames
         tensors: dict[str, np.ndarray] = {}
@@ -264,7 +354,7 @@ class CascorWorkerAgent:
                     error_message=f"Tensor manifest/frame mismatch: missing={sorted(missing)} extra={sorted(extra)}",
                 )
             )
-            return
+            return False
 
         logger.info("Received task %s (%d tensors)", task_id, len(tensors))
 
@@ -299,7 +389,7 @@ class CascorWorkerAgent:
                 "tensor_manifest": {},
             }
             await self._connection.send_json(error_msg)
-            return
+            return False
 
         # Build tensor manifest for result
         tensor_manifest = {}
@@ -337,6 +427,10 @@ class CascorWorkerAgent:
             result_dict.get("correlation", DEFAULT_CORRELATION),
             result_dict.get("success", False),
         )
+        # METRICS-MON R1.3: a returned-with-success result counts toward
+        # ``tasks_completed``; everything else (timeout, manifest reject,
+        # exception) counts as failed via the surrounding try/finally.
+        return bool(result_dict.get("success", False))
 
     @staticmethod
     def _build_capabilities() -> dict[str, Any]:
@@ -369,6 +463,23 @@ def _execute_task(
     from juniper_cascor_worker.task_executor import execute_training_task
 
     return execute_training_task(candidate_data, training_params, tensors)
+
+
+def _resolve_version() -> str:
+    """Return the installed package version, or "0.0.0+unknown" on failure.
+
+    Used by the HTTP health endpoint's ``/v1/health`` body. Never raises —
+    a probe surface failing to import metadata must not 500 on the operator.
+    """
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+
+        try:
+            return version("juniper-cascor-worker")
+        except PackageNotFoundError:
+            return "0.0.0+unknown"
+    except Exception:  # noqa: BLE001
+        return "0.0.0+unknown"
 
 
 def _parse_json(raw: str) -> dict[str, Any] | None:

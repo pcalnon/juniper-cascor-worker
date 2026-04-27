@@ -63,6 +63,35 @@ class TestWorkerConfig:
         with pytest.raises(WorkerConfigError, match="mp_context"):
             config.validate(legacy=True)
 
+    def test_health_defaults(self):
+        """METRICS-MON R1.3 / seed-04: health server defaults to 127.0.0.1:8210."""
+        config = WorkerConfig()
+        assert config.health_port == 8210
+        assert config.health_bind == "127.0.0.1"
+
+    def test_validate_invalid_health_port(self):
+        """METRICS-MON R1.3 / seed-04: health_port range enforced."""
+        config = WorkerConfig(server_url="ws://localhost:8200/", health_port=0)
+        with pytest.raises(WorkerConfigError, match="health_port"):
+            config.validate(legacy=False)
+        config = WorkerConfig(server_url="ws://localhost:8200/", health_port=99999)
+        with pytest.raises(WorkerConfigError, match="health_port"):
+            config.validate(legacy=False)
+
+    def test_validate_empty_health_bind(self):
+        """METRICS-MON R1.3 / seed-04: health_bind cannot be empty string."""
+        config = WorkerConfig(server_url="ws://localhost:8200/", health_bind="")
+        with pytest.raises(WorkerConfigError, match="health_bind"):
+            config.validate(legacy=False)
+
+    def test_from_env_health_overrides(self):
+        """METRICS-MON R1.3 / seed-04: env vars override health server defaults."""
+        env = {"CASCOR_WORKER_HEALTH_PORT": "9999", "CASCOR_WORKER_HEALTH_BIND": "0.0.0.0"}
+        with patch.dict(os.environ, env, clear=True):
+            config = WorkerConfig.from_env()
+            assert config.health_port == 9999
+            assert config.health_bind == "0.0.0.0"
+
     def test_from_env_defaults(self):
         with patch.dict(os.environ, {}, clear=True):
             config = WorkerConfig.from_env()

@@ -91,6 +91,21 @@ DEFAULT_HEARTBEAT_INTERVAL: Final[float] = 10.0
 DEFAULT_RECONNECT_BACKOFF_BASE: Final[float] = 1.0
 DEFAULT_RECONNECT_BACKOFF_MAX: Final[float] = 60.0
 
+# METRICS-MON R1.3 / seed-04: HTTP health server defaults.
+# Bound to localhost by default; operators set CASCOR_WORKER_HEALTH_BIND=0.0.0.0
+# explicitly when running under k8s with httpGet probes.
+DEFAULT_HEALTH_PORT: Final[int] = 8210
+DEFAULT_HEALTH_BIND: Final[str] = "127.0.0.1"
+# Liveness tick budget. The tick is purely in-process (consults
+# WS-connection-state + counter timestamp) and 250 ms catches event-loop
+# stalls that the WS-level heartbeat cannot.
+LIVENESS_TICK_BUDGET_MS: Final[int] = 250
+# Read timeout for incoming HTTP request bytes; bounds malformed-request DoS.
+HEALTH_REQUEST_READ_TIMEOUT_S: Final[float] = 2.0
+# Cap on accepted request bytes — covers method line + headers; a real
+# probe request is < 200 bytes.
+HEALTH_REQUEST_MAX_BYTES: Final[int] = 4096
+
 # Per-task training timeout (seconds). 1 hour by default.
 DEFAULT_TASK_TIMEOUT: Final[float] = 3600.0
 
@@ -127,6 +142,8 @@ ENV_SERVER_URL: Final[str] = "CASCOR_SERVER_URL"
 ENV_AUTH_TOKEN: Final[str] = "CASCOR_AUTH_TOKEN"  # nosec B105 — env var name, not a token value
 ENV_API_KEY: Final[str] = "CASCOR_API_KEY"  # nosec B105 — env var name, not a key value
 ENV_HEARTBEAT_INTERVAL: Final[str] = "CASCOR_HEARTBEAT_INTERVAL"
+ENV_HEALTH_PORT: Final[str] = "CASCOR_WORKER_HEALTH_PORT"
+ENV_HEALTH_BIND: Final[str] = "CASCOR_WORKER_HEALTH_BIND"
 ENV_TASK_TIMEOUT: Final[str] = "CASCOR_TASK_TIMEOUT"
 ENV_TLS_CERT: Final[str] = "CASCOR_TLS_CERT"
 ENV_TLS_KEY: Final[str] = "CASCOR_TLS_KEY"
