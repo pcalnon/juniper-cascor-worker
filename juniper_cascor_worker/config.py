@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 
 from juniper_cascor_worker.constants import (
+    DEFAULT_HEALTH_BIND,
+    DEFAULT_HEALTH_PORT,
     DEFAULT_HEARTBEAT_INTERVAL,
     DEFAULT_MANAGER_HOST,
     DEFAULT_MANAGER_PORT,
@@ -17,6 +19,8 @@ from juniper_cascor_worker.constants import (
     ENV_API_KEY,
     ENV_AUTH_TOKEN,
     ENV_AUTHKEY,
+    ENV_HEALTH_BIND,
+    ENV_HEALTH_PORT,
     ENV_HEARTBEAT_INTERVAL,
     ENV_MANAGER_HOST,
     ENV_MANAGER_PORT,
@@ -75,6 +79,13 @@ class WorkerConfig:
     tls_key: str | None = None
     tls_ca: str | None = None
 
+    # METRICS-MON R1.3 / seed-04: HTTP health server. Localhost-only by
+    # default to avoid exposing the probe surface unintentionally; set
+    # CASCOR_WORKER_HEALTH_BIND=0.0.0.0 explicitly when running under k8s
+    # so httpGet probes from kubelet reach it.
+    health_port: int = DEFAULT_HEALTH_PORT
+    health_bind: str = DEFAULT_HEALTH_BIND
+
     # Legacy BaseManager configuration
     manager_host: str = DEFAULT_MANAGER_HOST
     manager_port: int = DEFAULT_MANAGER_PORT
@@ -113,6 +124,8 @@ class WorkerConfig:
             tls_cert=os.getenv(ENV_TLS_CERT),
             tls_key=os.getenv(ENV_TLS_KEY),
             tls_ca=os.getenv(ENV_TLS_CA),
+            health_port=int(os.getenv(ENV_HEALTH_PORT, str(DEFAULT_HEALTH_PORT))),
+            health_bind=os.getenv(ENV_HEALTH_BIND, DEFAULT_HEALTH_BIND),
             manager_host=os.getenv(ENV_MANAGER_HOST, DEFAULT_MANAGER_HOST),
             manager_port=int(os.getenv(ENV_MANAGER_PORT, str(DEFAULT_MANAGER_PORT))),
             authkey=os.getenv(ENV_AUTHKEY, ""),
@@ -147,6 +160,10 @@ class WorkerConfig:
                 raise WorkerConfigError(f"reconnect_backoff_base must be > 0, got {self.reconnect_backoff_base}")
             if self.task_timeout <= 0:
                 raise WorkerConfigError(f"task_timeout must be > 0, got {self.task_timeout}")
+            if self.health_port < MIN_PORT or self.health_port > MAX_PORT:
+                raise WorkerConfigError(f"health_port must be {MIN_PORT}-{MAX_PORT}, got {self.health_port}")
+            if not self.health_bind:
+                raise WorkerConfigError("health_bind must be a non-empty hostname/IP")
 
     @property
     def address(self) -> tuple:

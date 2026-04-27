@@ -276,6 +276,12 @@ class TestRunControlFlow:
     @pytest.mark.asyncio
     async def test_run_connects_and_registers(self):
         """run() connects, receives connection_established, sends register, starts loops."""
+        # METRICS-MON R1.3 / seed-04: ``run()`` now starts a HealthServer on
+        # ``health_port`` before entering the connect loop. Patch its
+        # start/stop methods so the test does not bind a real port (which
+        # would require a free port allocation and admit a flake on busy
+        # CI runners) and so the event loop does not yield enough times
+        # for ``stop_after_delay`` to fire before connect_with_retry runs.
         config = _make_ws_config()
         agent = CascorWorkerAgent(config)
 
@@ -288,7 +294,7 @@ class TestRunControlFlow:
         # Make message_loop's receive() raise to trigger stop after registration
         mock_conn.receive.side_effect = WorkerConnectionError("test disconnect")
 
-        with patch("juniper_cascor_worker.ws_connection.WorkerConnection", return_value=mock_conn), patch.object(CascorWorkerAgent, "_build_capabilities", return_value={"cpu_cores": 4}), patch("juniper_cascor_worker.worker.asyncio.sleep", new_callable=AsyncMock):
+        with patch("juniper_cascor_worker.ws_connection.WorkerConnection", return_value=mock_conn), patch.object(CascorWorkerAgent, "_build_capabilities", return_value={"cpu_cores": 4}), patch("juniper_cascor_worker.worker.asyncio.sleep", new_callable=AsyncMock), patch("juniper_cascor_worker.http_health.HealthServer.start", new_callable=AsyncMock), patch("juniper_cascor_worker.http_health.HealthServer.stop", new_callable=AsyncMock):
             # Stop after first loop iteration
             async def stop_after_delay():
                 await asyncio.sleep(0)
