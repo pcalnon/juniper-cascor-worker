@@ -63,7 +63,7 @@ juniper_cascor_worker = ["py.typed"]
 
 [tool.black]
 line-length = 512
-target-version = ["py314"]
+target-version = ["py312"]
 
 [tool.isort]
 profile = "black"

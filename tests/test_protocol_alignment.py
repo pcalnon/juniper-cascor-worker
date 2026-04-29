@@ -27,14 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from juniper_cascor_worker.constants import (
-    MSG_TYPE_ERROR,
-    MSG_TYPE_HEARTBEAT,
-    MSG_TYPE_REGISTER,
-    MSG_TYPE_TASK_ASSIGN,
-    MSG_TYPE_TASK_RESULT,
-    MSG_TYPE_TOKEN_REFRESH,
-)
+from juniper_cascor_worker.constants import MSG_TYPE_ERROR, MSG_TYPE_HEARTBEAT, MSG_TYPE_REGISTER, MSG_TYPE_TASK_ASSIGN, MSG_TYPE_TASK_RESULT, MSG_TYPE_TOKEN_REFRESH
 
 
 def _import_cascor_message_type():
@@ -70,9 +63,8 @@ def _import_cascor_message_type():
             sys.path.insert(0, str(path))
         if importlib.util.find_spec("api.workers.protocol") is None:
             continue
-        from api.workers.protocol import MessageType  # type: ignore[import-not-found]
-
-        return MessageType
+        protocol_mod = importlib.import_module("api.workers.protocol")
+        return protocol_mod.MessageType
 
     return None
 
@@ -81,10 +73,7 @@ def _import_cascor_message_type():
 def cascor_message_type():
     enum_cls = _import_cascor_message_type()
     if enum_cls is None:
-        pytest.skip(
-            "cascor server source not importable — set CASCOR_SRC_PATH or run "
-            "from a checkout that contains a sibling juniper-cascor/src tree"
-        )
+        pytest.skip("cascor server source not importable — set CASCOR_SRC_PATH or run " "from a checkout that contains a sibling juniper-cascor/src tree")
     return enum_cls
 
 

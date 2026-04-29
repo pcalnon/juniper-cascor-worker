@@ -92,7 +92,7 @@ repos:
   # Python Code Formatting - Black
   # ═══════════════════════════════════════════════════════════════════════════
   - repo: https://github.com/psf/black
-    rev: 25.1.0
+    rev: 26.3.1
     hooks:
       - id: black
         name: Format with Black
@@ -163,7 +163,7 @@ repos:
         args:
           - --ignore-missing-imports
           - --no-strict-optional
-          - --python-version=3.11
+          - --python-version=3.12
         files: ^juniper_cascor_worker/.*\.py$
         additional_dependencies: []
 

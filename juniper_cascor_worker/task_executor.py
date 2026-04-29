@@ -45,12 +45,7 @@ def _get_candidate_unit_class() -> Any:
     try:
         from candidate_unit.candidate_unit import CandidateUnit
     except ImportError as exc:
-        raise ImportError(
-            "CasCor codebase not found. Ensure the JuniperCascor src "
-            "directory is on sys.path via --cascor-path or installed in "
-            "the environment. CW-05 Approach A (juniper-cascor-core "
-            f"package) is the canonical long-term fix. Original error: {exc}"
-        ) from exc
+        raise ImportError("CasCor codebase not found. Ensure the JuniperCascor src " "directory is on sys.path via --cascor-path or installed in " "the environment. CW-05 Approach A (juniper-cascor-core " f"package) is the canonical long-term fix. Original error: {exc}") from exc
     return CandidateUnit
 
 

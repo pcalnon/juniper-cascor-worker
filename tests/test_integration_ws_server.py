@@ -40,16 +40,7 @@ import websockets
 from websockets.asyncio.server import ServerConnection
 
 from juniper_cascor_worker.config import WorkerConfig
-from juniper_cascor_worker.constants import (
-    BINARY_FRAME_DTYPE_ENCODING,
-    BINARY_FRAME_HEADER_LENGTH_FORMAT,
-    MSG_TYPE_CONNECTION_ESTABLISHED,
-    MSG_TYPE_HEARTBEAT,
-    MSG_TYPE_REGISTER,
-    MSG_TYPE_REGISTRATION_ACK,
-    MSG_TYPE_TASK_ASSIGN,
-    MSG_TYPE_TASK_RESULT,
-)
+from juniper_cascor_worker.constants import BINARY_FRAME_DTYPE_ENCODING, BINARY_FRAME_HEADER_LENGTH_FORMAT, MSG_TYPE_CONNECTION_ESTABLISHED, MSG_TYPE_HEARTBEAT, MSG_TYPE_REGISTER, MSG_TYPE_REGISTRATION_ACK, MSG_TYPE_TASK_ASSIGN, MSG_TYPE_TASK_RESULT
 from juniper_cascor_worker.worker import CascorWorkerAgent
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]

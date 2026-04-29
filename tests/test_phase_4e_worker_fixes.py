@@ -18,7 +18,6 @@ import pytest
 from juniper_cascor_worker import worker as worker_mod
 from juniper_cascor_worker.constants import DEFAULT_CORRELATION, MSG_TYPE_TASK_RESULT, NO_BEST_CORR_IDX, NO_EPOCHS_COMPLETED
 
-
 # ─── _validate_tensor_manifest (CW-07) ──────────────────────────────────────
 
 
@@ -166,15 +165,10 @@ def test_task_executor_module_import_does_not_load_torch() -> None:
     deleting it from a long-running process breaks every subsequent torch
     import in the same session.
     """
-    import subprocess
+    import subprocess  # nosec B404 — test-only: launches a fresh interpreter to keep parent sys.modules pristine
 
-    script = (
-        "import sys; "
-        "import juniper_cascor_worker.task_executor; "
-        "torch_loaded = any(k == 'torch' or k.startswith('torch.') for k in sys.modules); "
-        "print('LOADED' if torch_loaded else 'NOT_LOADED')"
-    )
-    completed = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=30)
+    script = "import sys; " "import juniper_cascor_worker.task_executor; " "torch_loaded = any(k == 'torch' or k.startswith('torch.') for k in sys.modules); " "print('LOADED' if torch_loaded else 'NOT_LOADED')"
+    completed = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=30)  # nosec B603 — fixed argv (sys.executable + literal script), no shell, no user input
     assert completed.returncode == 0, completed.stderr
     assert completed.stdout.strip() == "NOT_LOADED", "task_executor must not import torch at module load time (CW-08)"
 
