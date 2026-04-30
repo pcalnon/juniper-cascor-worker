@@ -1,0 +1,64 @@
+---
+#####################################################################################################################################################################################################
+# Project:       Juniper
+# File Name:     lockfile-update.yml (template)
+#
+# Description:
+#    Refresh pinned CI lockfiles weekly via PR. Drop into a target repo's
+#    `.github/workflows/lockfile-update.yml`. Each Juniper repo should
+#    expose a `util/generate_dep_docs.sh` (or equivalent) that regenerates
+#    `requirements_ci.txt` and `conda_environment_ci.yaml`. The workflow
+#    pushes the diff (if any) onto a new branch and opens a PR.
+#
+#    PRs are opened by `peter-evans/create-pull-request` using the
+#    workflow's GITHUB_TOKEN. No additional secret is required for the
+#    common case.
+#####################################################################################################################################################################################################
+
+name: Update Lockfiles
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'  # weekly Monday 08:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    name: Refresh CI lockfiles
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Regenerate dependency lockfiles
+        run: |
+          if [ -f util/generate_dep_docs.sh ]; then
+            bash util/generate_dep_docs.sh
+          else
+            echo "::warning::util/generate_dep_docs.sh not found; nothing to refresh"
+            exit 0
+          fi
+
+      - name: Open PR if lockfiles changed
+        uses: peter-evans/create-pull-request@271a8d0340265f705aeb70568e08251a5f6ed72b  # v7.0.5
+        with:
+          branch: chore/lockfile-update
+          delete-branch: true
+          commit-message: 'chore(deps): refresh CI lockfiles'
+          title: 'chore(deps): refresh CI lockfiles'
+          body: |
+            Automated weekly refresh of CI lockfiles via
+            `util/generate_dep_docs.sh`.
+          labels: |
+            dependencies
+            automated

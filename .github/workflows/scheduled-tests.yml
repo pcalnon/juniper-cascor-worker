@@ -1,0 +1,76 @@
+---
+#####################################################################################################################################################################################################
+# Project:       Juniper
+# File Name:     scheduled-tests.yml (template)
+#
+# Description:
+#    Canonical "slow / nightly" tests workflow. Drop into a target repo's
+#    `.github/workflows/scheduled-tests.yml`. Two TODOs to customize per
+#    repo:
+#      1. PYTHON_TEST_VERSION — match the repo's preferred test Python
+#         (3.12 for most; 3.11 for juniper-cascor-client; 3.14 for
+#         juniper-cascor's existing workflow).
+#      2. The `pytest -m` selector — repos with `slow` markers should
+#         use `slow or integration`; repos without should use just
+#         `integration`.
+#
+#    juniper-cascor already ships a richer scheduled-tests.yml (slow
+#    unit + slow integration + long-running + benchmarks). That richer
+#    flavor is *not* generalized in this template — keep it as
+#    juniper-cascor's local override.
+#####################################################################################################################################################################################################
+
+name: Scheduled Tests
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # daily at 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_TEST_VERSION: "3.12"
+
+jobs:
+  slow-or-integration-tests:
+    name: Slow / Integration Tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]" || pip install -e ".[dev]" || pip install -e .
+
+      - name: Run slow / integration tests
+        run: |
+          mkdir -p reports/junit
+          python -m pytest \
+            -m "slow or integration" \
+            --tb=short \
+            --maxfail=10 \
+            --junitxml=reports/junit/junit-slow.xml
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        if: always()
+        with:
+          name: scheduled-test-results-${{ matrix.python-version }}
+          path: reports/junit/
+          retention-days: 30
