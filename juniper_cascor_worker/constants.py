@@ -15,6 +15,15 @@ here MUST be coordinated with the server's ``MessageType`` enum.
 
 from typing import Final
 
+# METRICS-MON R2.2.6 / seed-05: single-source the wire type strings via
+# the canonical StrEnum in juniper-cascor-protocol. Keeping the
+# ``MSG_TYPE_*`` aliases as ``Final[str]`` preserves byte-compatibility
+# with every existing import in this package while routing the values
+# through one definition. ``WorkerMessageType`` is a numpy-only StrEnum
+# — importing it does NOT pull Pydantic into the worker's runtime, per
+# the R2 exit-gate decision (juniper-ml#168).
+from juniper_cascor_protocol.worker import WorkerMessageType
+
 # ---------------------------------------------------------------------------
 # Protocol Message Types (WIRE PROTOCOL — must match juniper-cascor server)
 # ---------------------------------------------------------------------------
@@ -22,15 +31,16 @@ from typing import Final
 # server-only `connection_established` and `registration_ack`/`result_ack`
 # acknowledgement strings emitted by the worker_stream endpoint.
 
-MSG_TYPE_CONNECTION_ESTABLISHED: Final[str] = "connection_established"
-MSG_TYPE_REGISTER: Final[str] = "register"
-MSG_TYPE_REGISTRATION_ACK: Final[str] = "registration_ack"
-MSG_TYPE_HEARTBEAT: Final[str] = "heartbeat"
-MSG_TYPE_TASK_ASSIGN: Final[str] = "task_assign"
-MSG_TYPE_TASK_RESULT: Final[str] = "task_result"
-MSG_TYPE_RESULT_ACK: Final[str] = "result_ack"
-MSG_TYPE_TOKEN_REFRESH: Final[str] = "token_refresh"  # nosec B105 — protocol message type, not a password
-MSG_TYPE_ERROR: Final[str] = "error"
+
+MSG_TYPE_CONNECTION_ESTABLISHED: Final[str] = WorkerMessageType.CONNECTION_ESTABLISHED.value
+MSG_TYPE_REGISTER: Final[str] = WorkerMessageType.REGISTER.value
+MSG_TYPE_REGISTRATION_ACK: Final[str] = WorkerMessageType.REGISTRATION_ACK.value
+MSG_TYPE_HEARTBEAT: Final[str] = WorkerMessageType.HEARTBEAT.value
+MSG_TYPE_TASK_ASSIGN: Final[str] = WorkerMessageType.TASK_ASSIGN.value
+MSG_TYPE_TASK_RESULT: Final[str] = WorkerMessageType.TASK_RESULT.value
+MSG_TYPE_RESULT_ACK: Final[str] = WorkerMessageType.RESULT_ACK.value
+MSG_TYPE_TOKEN_REFRESH: Final[str] = WorkerMessageType.TOKEN_REFRESH.value  # nosec B105 — protocol message type, not a password
+MSG_TYPE_ERROR: Final[str] = WorkerMessageType.ERROR.value
 
 # ---------------------------------------------------------------------------
 # Activation Function Names

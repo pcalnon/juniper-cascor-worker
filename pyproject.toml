@@ -29,6 +29,15 @@ dependencies = [
     "numpy>=1.24.0",
     "torch>=2.0.0",
     "websockets>=11.0",
+    # METRICS-MON R2.2.6 / seed-05: single-sources the WorkerMessageType
+    # StrEnum + BinaryFrame numpy codec used on /ws/v1/workers. Worker
+    # imports ONLY ``juniper_cascor_protocol.worker.*`` at runtime —
+    # the envelope subpackage (which would pull Pydantic) is never
+    # touched, preserving the R2 exit-gate decision (juniper-ml#168).
+    # Pydantic is still listed as a transitive dependency on disk but
+    # never loaded by the worker process; verified by
+    # tests/test_no_pydantic_at_runtime.py.
+    "juniper-cascor-protocol>=0.1.0",
 ]
 
 [project.optional-dependencies]
