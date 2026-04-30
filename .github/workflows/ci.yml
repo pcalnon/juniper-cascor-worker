@@ -196,6 +196,73 @@ jobs:
           retention-days: 30
 
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # Integration Tests: pytest -m integration on the full Python matrix
+  # Alignment plan Phase 2 — additive only; soft-fail in required-checks
+  # for the shakedown cycle.
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  integration-tests:
+    name: Integration Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: [pre-commit]
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+
+      - name: Create required directories
+        run: mkdir -p reports/junit
+
+      - name: Run Integration Tests (-m integration)
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       juniper-cascor-worker - Integration Tests            ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+
+          # If no tests are collected for the integration marker, pytest
+          # exits with code 5; treat that as a clean skip rather than a
+          # failure during the shakedown cycle.
+          set +e
+          python -m pytest \
+            -m "integration" \
+            tests/ \
+            --verbose \
+            --timeout=120 \
+            --maxfail=5 \
+            --junitxml=reports/junit/junit-integration.xml
+          rc=$?
+          set -e
+          if [ "$rc" = "5" ]; then
+            echo "::notice::No integration-marked tests collected — treating as skip."
+            exit 0
+          fi
+          exit "$rc"
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        if: always()
+        with:
+          name: integration-test-results-py${{ matrix.python-version }}
+          path: reports/junit/
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
   # Build: Build sdist and wheel artifacts
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   build:
@@ -375,7 +442,7 @@ jobs:
     name: Quality Gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [pre-commit, unit-tests, build, dependency-docs, security, docs]
+    needs: [pre-commit, unit-tests, integration-tests, build, dependency-docs, security, docs]
 
     steps:
       - name: Check Quality Gate Status
@@ -386,6 +453,7 @@ jobs:
           echo ""
           echo "Pre-commit:        ${{ needs.pre-commit.result }}"
           echo "Unit Tests:        ${{ needs.unit-tests.result }}"
+          echo "Integration Tests: ${{ needs.integration-tests.result }}"
           echo "Build:             ${{ needs.build.result }}"
           echo "Dependency Docs:   ${{ needs.dependency-docs.result }}"
           echo "Security:          ${{ needs.security.result }}"
@@ -400,6 +468,12 @@ jobs:
           if [[ "${{ needs.unit-tests.result }}" != "success" ]]; then
             echo "::error::Unit tests failed"
             exit 1
+          fi
+
+          # Integration tests: soft-fail during the alignment-plan
+          # shakedown cycle. Promote to a hard gate once stabilised.
+          if [[ "${{ needs.integration-tests.result }}" == "failure" ]]; then
+            echo "::warning::Integration tests failed (soft-fail shakedown cycle)"
           fi
 
           if [[ "${{ needs.build.result }}" != "success" ]]; then
