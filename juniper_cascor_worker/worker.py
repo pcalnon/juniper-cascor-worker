@@ -279,7 +279,16 @@ class CascorWorkerAgent:
             elif msg_type == MSG_TYPE_ERROR:
                 logger.error("Server error: %s", msg.get("error"))
             else:
-                logger.warning("Unknown message type: %s", msg_type)
+                # METRICS-MON R2.2.6 / seed-05: structured WARNING line so log
+                # shippers (Loki, etc.) can count unrecognized inbound frames
+                # without the worker depending on prometheus_client. The
+                # ``worker_id`` extra correlates the diagnostic with a
+                # specific worker pod even when many workers share a
+                # log stream.
+                logger.warning(
+                    "juniper_cascor_worker_unrecognized_ws_frame",
+                    extra={"type": msg_type, "worker_id": self.worker_id},
+                )
 
     async def _handle_task_assign(self, msg: dict[str, Any]) -> None:
         """Handle a task_assign message: receive tensors, train, send result."""
@@ -549,14 +558,23 @@ def _build_task_failure_message(
 
 
 def _encode_binary_frame(array: np.ndarray) -> bytes:
-    """Encode a numpy array as a binary frame (matches Phase 1b BinaryFrame.encode)."""
-    arr = np.ascontiguousarray(array)
-    shape = arr.shape
-    dtype_str = str(arr.dtype).encode(BINARY_FRAME_DTYPE_ENCODING)
-    header = struct.pack(f"<I{len(shape)}I", len(shape), *shape)
-    header += struct.pack(BINARY_FRAME_HEADER_LENGTH_FORMAT, len(dtype_str))
-    header += dtype_str
-    return header + arr.tobytes()
+    """Encode a numpy array as a binary frame.
+
+    METRICS-MON R2.2.6 / seed-05: delegates to the canonical encoder in
+    :class:`juniper_cascor_protocol.worker.BinaryFrame` so the wire
+    format is single-sourced with the cascor server. The local
+    constants (``BINARY_FRAME_HEADER_LENGTH_FORMAT`` etc.) remain in
+    ``constants.py`` for use by ``_decode_binary_frame`` which keeps
+    SEC-18 stricter bounds (``BINARY_FRAME_MAX_TOTAL_ELEMENTS``,
+    ``BINARY_FRAME_MAX_DTYPE_LEN=32``) that the shared lib's decoder
+    does not enforce.
+
+    Importing :class:`juniper_cascor_protocol.worker.BinaryFrame` does
+    not load Pydantic — the worker subpackage is numpy-only by design.
+    """
+    from juniper_cascor_protocol.worker import BinaryFrame as _SharedBinaryFrame
+
+    return _SharedBinaryFrame.encode(array)
 
 
 # SEC-18: Bounds for attacker-controlled binary-frame headers. A crafted

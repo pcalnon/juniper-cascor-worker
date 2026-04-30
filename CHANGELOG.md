@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **METRICS-MON R2.2.6 / seed-05**: worker now consumes the shared `juniper-cascor-protocol>=0.1.0` package as a runtime dependency to single-source the `/ws/v1/workers` wire-protocol surface.
+  - `juniper_cascor_worker/constants.py` — the `MSG_TYPE_*` `Final[str]` literals are now derived from `juniper_cascor_protocol.worker.WorkerMessageType` rather than declared inline. The string values are byte-identical to the previous declarations (`"register"`, `"heartbeat"`, `"task_assign"`, `"task_result"`, `"registration_ack"`, `"result_ack"`, `"token_refresh"`, `"error"`, `"connection_established"`); a future cascor-server rename of any wire string would propagate here automatically.
+  - `juniper_cascor_worker/worker.py::_encode_binary_frame` — delegates to `juniper_cascor_protocol.worker.BinaryFrame.encode` so the on-the-wire bytes for outbound tensor frames are guaranteed to match the cascor server's encoder. Encoded output is byte-identical to the pre-migration implementation (verified by `test_encode_binary_frame_uses_shared_codec`).
+  - `juniper_cascor_worker/worker.py::_decode_binary_frame` — **kept local intentionally**. The worker enforces stricter SEC-18 bounds (`BINARY_FRAME_MAX_TOTAL_ELEMENTS = 100_000_000`, `BINARY_FRAME_MAX_DTYPE_LEN = 32`) than the shared lib's defaults, and replacing with `juniper_cascor_protocol.worker.BinaryFrame.decode` would relax the dtype-length cap from 32 to 64 bytes. Round-tripping with the shared encoder still works (verified by `test_local_decoder_still_round_trips_with_shared_encoder`).
+  - The dispatch loop in `CascorWorkerAgent._run` now emits a **structured** WARNING log line `juniper_cascor_worker_unrecognized_ws_frame` (with `type` and `worker_id` extra keys) when an inbound JSON frame's `type` is not one of the recognized `MSG_TYPE_*` values. Replaces the previous unstructured `logger.warning("Unknown message type: %s", msg_type)` so log shippers (Loki, etc.) can count unrecognized frames per worker pod without the worker depending on `prometheus-client` (per the R2 exit-gate decision, the worker does not gain a `/metrics` endpoint).
+  - **No Pydantic at runtime**: importing any worker module — `juniper_cascor_worker`, `juniper_cascor_worker.constants`, `juniper_cascor_worker.worker`, `juniper_cascor_worker.cli`, `juniper_cascor_worker.config`, `juniper_cascor_worker.http_health`, `juniper_cascor_worker.task_executor`, `juniper_cascor_worker.ws_connection` — does not place `pydantic` in `sys.modules`. The Pydantic wheel ships on disk as a transitive dep of `juniper-cascor-protocol`, but the worker only imports `juniper_cascor_protocol.worker.*` (numpy-only) and never crosses the envelope subpackage. Pinned by the new test suite at `tests/test_no_pydantic_at_runtime.py` (6 tests across the public worker import surface).
+  - See [`notes/code-review/METRICS_MONITORING_R2.2_WS_FRAME_SCHEMA_DESIGN_2026-04-29.md`](https://github.com/pcalnon/juniper-ml/blob/main/notes/code-review/METRICS_MONITORING_R2.2_WS_FRAME_SCHEMA_DESIGN_2026-04-29.md) §Q3 in juniper-ml for the rationale.
+
 ### Added
 
 - **METRICS-MON R1.3 / seed-04**: HTTP health-probe surface for the worker.
