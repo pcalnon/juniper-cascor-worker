@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **METRICS-MON R3.7 / seed-(R1.3 design)**: macOS leg added to the unit-tests CI matrix. `.github/workflows/ci.yml::unit-tests` now runs on `${{ matrix.os }}` with a single new `macos-latest` (Apple Silicon / ARM) entry pinned to Python 3.12; Linux legs (Python 3.12 + 3.13 + 3.14) are unchanged. The macOS leg starts in **`continue-on-error: true`** mode for a 2-week soak (2026-04-30 → 2026-05-14) so platform-divergence failures (cross-platform `rss_mb` sampling, POSIX-only assumptions) surface in CI without blocking PRs while environment-specific issues are identified. The torch wheel install branches by OS — Linux uses the CPU-only PyTorch index (`https://download.pytorch.org/whl/cpu`) which has no macOS-arm64 wheels; macOS uses the default PyPI index which does. After the soak, flip the include block's `experimental` flag to `false` to make the macOS leg required. Closes the cascor-worker leg of [METRICS_MONITORING_R3_ENTRY_PLAN_2026-04-30.md](https://github.com/pcalnon/juniper-ml/blob/main/notes/code-review/METRICS_MONITORING_R3_ENTRY_PLAN_2026-04-30.md) §3 Q1.
+
 ### Changed
 
 - **METRICS-MON R2.2.6 / seed-05**: worker now consumes the shared `juniper-cascor-protocol>=0.1.0` package as a runtime dependency to single-source the `/ws/v1/workers` wire-protocol surface.
