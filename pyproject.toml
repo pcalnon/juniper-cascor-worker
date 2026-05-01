@@ -83,11 +83,28 @@ known_first_party = ["juniper_cascor_worker"]
 minversion = "6.0"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = ["-ra", "-q", "--strict-markers"]
+addopts = [
+    "-ra",
+    "-q",
+    "--strict-markers",
+    # Block pytest plugins auto-discovered from the active conda env but
+    # unused by this project. dash.testing.plugin transitively imports psutil;
+    # if the env has a non-FT psutil wheel (abi3 landed in python3.14t),
+    # psutil segfaults during plugin init before pytest collects any tests.
+    # pytest_playwright is similarly autoloaded and breaks when `playwright`
+    # is missing.
+    "-p", "no:dash",
+    "-p", "no:playwright",
+]
 filterwarnings = [
     "error",
     "ignore:CandidateTrainingWorker is deprecated:DeprecationWarning:tests.test_worker",
     "ignore:coroutine .* was never awaited:RuntimeWarning",
+    # _brotli is an indirect dep via urllib3/dash that has not declared
+    # free-threading safety; under python3.14t this re-enables the GIL and
+    # emits a RuntimeWarning that filterwarnings='error' would otherwise
+    # promote into a collection failure.
+    "ignore:The global interpreter lock \\(GIL\\) has been enabled to load module:RuntimeWarning",
 ]
 markers = [
     "unit: Unit tests",
