@@ -486,10 +486,8 @@ class TestMessageLoopDispatch:
         agent._connection = mock_conn
 
         with caplog.at_level("WARNING", logger="juniper_cascor_worker.worker"):
-            try:
+            with pytest.raises(WorkerConnectionError):
                 await agent._message_loop()
-            except WorkerConnectionError:
-                pass
 
         # Filter to records emitted by the production emission site —
         # other WARNINGs in the loop (e.g. binary-frame-out-of-context)
