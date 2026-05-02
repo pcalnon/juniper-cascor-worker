@@ -14,9 +14,7 @@ import sysconfig
 #
 # Override with JUNIPER_CASCOR_WORKER_ALLOW_FREE_THREADING=1 if the env's
 # native deps have been rebuilt for the cpython-314t ABI.
-if sysconfig.get_config_var("Py_GIL_DISABLED") and not os.environ.get(
-    "JUNIPER_CASCOR_WORKER_ALLOW_FREE_THREADING"
-):
+if sysconfig.get_config_var("Py_GIL_DISABLED") and not os.environ.get("JUNIPER_CASCOR_WORKER_ALLOW_FREE_THREADING"):
     sys.stderr.write(
         "\n"
         "ERROR: pytest is running under a free-threading CPython build (Py_GIL_DISABLED=1).\n"
