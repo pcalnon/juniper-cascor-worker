@@ -19,8 +19,15 @@ import struct
 import time
 import uuid
 import warnings
+from collections import deque
 from multiprocessing.context import BaseContext
 from typing import TYPE_CHECKING, Any, Optional, Union
+
+# METRICS-MON R4.4: cap on per-heartbeat ``recent_task_durations_seconds``
+# payload entries. Keeps heartbeat frame size bounded under prolonged
+# task-completion bursts; server-side percentile estimators only need a
+# handful of recent samples per heartbeat tick.
+_RECENT_TASK_WINDOW: int = 16
 
 if TYPE_CHECKING:
     from juniper_cascor_worker.http_health import HealthServer
@@ -69,6 +76,12 @@ class CascorWorkerAgent:
         self._liveness_counter: int = 0
         self._liveness_last_tick_at: float = time.monotonic()
         self._registered: bool = False
+        # METRICS-MON R4.4: per-task instrumentation. Wall-clock duration of
+        # the most recently completed task; sliding window of recent task
+        # durations for percentile calculation server-side. Cap the window
+        # at ``_RECENT_TASK_WINDOW`` so payload size stays bounded.
+        self._last_task_duration_seconds: float | None = None
+        self._recent_task_durations_seconds: deque[float] = deque(maxlen=_RECENT_TASK_WINDOW)
         # The HTTP health server is built lazily in ``run()`` so tests can
         # construct an agent without binding a port.
         self._health_server: Optional["HealthServer"] = None
@@ -229,6 +242,15 @@ class CascorWorkerAgent:
         ``in_flight_tasks``, ``last_task_completed_at``, ``rss_mb``, and
         the running task counters so cascor's ``WorkerRegistration`` and
         ``/v1/workers`` route can surface diagnostic state.
+
+        METRICS-MON R4.4: payload further enriched with
+        ``last_task_duration_seconds`` (most-recent task wall-clock
+        timing), ``recent_task_durations_seconds`` (sliding window of the
+        last ``_RECENT_TASK_WINDOW`` durations for server-side
+        percentile estimation), and ``gpu_utilization_pct`` (None when no
+        CUDA device or torch unavailable). All three fields are optional
+        — older cascor servers ignore unknown keys, and workers that
+        haven't completed a task yet send ``None`` / ``[]`` defaults.
         """
         from juniper_cascor_worker.http_health import sample_rss_mb
 
@@ -246,6 +268,10 @@ class CascorWorkerAgent:
                         "rss_mb": sample_rss_mb(),
                         "tasks_completed": self._tasks_completed,
                         "tasks_failed": self._tasks_failed,
+                        # R4.4 training-loop instrumentation fields:
+                        "last_task_duration_seconds": self._last_task_duration_seconds,
+                        "recent_task_durations_seconds": list(self._recent_task_durations_seconds),
+                        "gpu_utilization_pct": _sample_gpu_utilization_pct(),
                     }
                     await self._connection.send_json(msg)
                     self._bump_liveness()
@@ -299,11 +325,19 @@ class CascorWorkerAgent:
         # accurate regardless of where execution exits.
         self._in_flight_tasks += 1
         success = False
+        # METRICS-MON R4.4: wall-clock timing wraps the entire lifecycle
+        # so failed / timed-out tasks also contribute to the percentile
+        # window — timeouts and slow failures are exactly the
+        # distributions operators want to see.
+        task_start = time.monotonic()
         try:
             success = await self._handle_task_assign_body(msg)
         finally:
+            duration = time.monotonic() - task_start
             self._in_flight_tasks -= 1
             self._last_task_completed_at = time.time()
+            self._last_task_duration_seconds = duration
+            self._recent_task_durations_seconds.append(duration)
             if success:
                 self._tasks_completed += 1
             else:
@@ -472,6 +506,37 @@ def _execute_task(
     from juniper_cascor_worker.task_executor import execute_training_task
 
     return execute_training_task(candidate_data, training_params, tensors)
+
+
+def _sample_gpu_utilization_pct() -> float | None:
+    """METRICS-MON R4.4: best-effort GPU utilization sample (0–100, %).
+
+    Returns ``None`` whenever a numeric reading isn't available — torch
+    not installed, no CUDA device, ``nvml`` not loadable in the
+    container, or the sampling call raises. The cascor server treats
+    ``None`` as "no signal" and leaves the field at its default; this
+    matches the R1.3 ``rss_mb`` defaulting pattern.
+
+    Implementation prefers ``torch.cuda.utilization()`` (which delegates
+    to NVML) over ``torch.cuda.memory_allocated() / total_memory`` — the
+    former reports compute utilization, the latter only reports memory
+    occupancy and would mislead operators looking at "GPU usage".
+    """
+    try:
+        import torch  # noqa: PLC0415
+
+        if not torch.cuda.is_available():
+            return None
+        # ``torch.cuda.utilization()`` returns an int 0–100; wrap in
+        # ``float`` so JSON-serialized payload type is stable across
+        # ``rss_mb``-style fields (also float-typed).
+        return float(torch.cuda.utilization())
+    except Exception:
+        # Defensive: NVML can raise on container hosts that lack the
+        # /dev/nvidia* device nodes even when torch.cuda.is_available()
+        # returns True (rare misconfiguration). Return None so the
+        # heartbeat path stays robust.
+        return None
 
 
 def _resolve_version() -> str:
