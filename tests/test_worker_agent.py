@@ -378,6 +378,147 @@ class TestHeartbeatLoop:
         # Should exit cleanly without raising
         await agent._heartbeat_loop()
 
+    @pytest.mark.asyncio
+    async def test_heartbeat_payload_carries_r4_4_training_loop_fields(self):
+        """METRICS-MON R4.4: heartbeat payload includes the new training-loop
+        instrumentation fields ``last_task_duration_seconds``,
+        ``recent_task_durations_seconds``, ``gpu_utilization_pct`` alongside
+        the R1.3 fields. Defaults must be ``None`` / ``[]`` so the payload
+        round-trips cleanly when no tasks have been completed yet (cascor
+        server tolerates ``None`` per the R1.3 design).
+        """
+        config = _make_ws_config(heartbeat_interval=0.01)
+        agent = CascorWorkerAgent(config)
+        # Pre-populate the sliding window so the payload is non-empty —
+        # this also pins that the deque is JSON-serializable as a list.
+        agent._last_task_duration_seconds = 0.5
+        agent._recent_task_durations_seconds.extend([0.1, 0.2, 0.5])
+
+        mock_conn = AsyncMock()
+        mock_conn.connected = True
+        agent._connection = mock_conn
+
+        captured: list[dict] = []
+
+        async def capture_send(msg):
+            captured.append(msg)
+            agent._stop_event.set()
+
+        mock_conn.send_json = AsyncMock(side_effect=capture_send)
+
+        # Force ``_sample_gpu_utilization_pct`` to a deterministic value
+        # so the test doesn't depend on the host having a CUDA device.
+        with patch("juniper_cascor_worker.worker._sample_gpu_utilization_pct", return_value=42.0):
+            await agent._heartbeat_loop()
+
+        assert len(captured) == 1
+        payload = captured[0]
+        assert payload["type"] == "heartbeat"
+        # R1.3 baseline still present (regression guard).
+        assert payload["worker_id"] == agent.worker_id
+        assert "in_flight_tasks" in payload
+        assert "last_task_completed_at" in payload
+        assert "rss_mb" in payload
+        # R4.4 new fields:
+        assert payload["last_task_duration_seconds"] == 0.5
+        assert payload["recent_task_durations_seconds"] == [0.1, 0.2, 0.5]
+        assert payload["gpu_utilization_pct"] == 42.0
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_payload_defaults_when_no_tasks_yet(self):
+        """METRICS-MON R4.4: pre-task heartbeat sends ``None`` for
+        ``last_task_duration_seconds`` and ``[]`` for the recent-window
+        list. Cascor server treats ``None`` as no-signal per R1.3 pattern.
+        """
+        config = _make_ws_config(heartbeat_interval=0.01)
+        agent = CascorWorkerAgent(config)
+
+        mock_conn = AsyncMock()
+        mock_conn.connected = True
+        agent._connection = mock_conn
+
+        captured: list[dict] = []
+
+        async def capture_send(msg):
+            captured.append(msg)
+            agent._stop_event.set()
+
+        mock_conn.send_json = AsyncMock(side_effect=capture_send)
+
+        with patch("juniper_cascor_worker.worker._sample_gpu_utilization_pct", return_value=None):
+            await agent._heartbeat_loop()
+
+        payload = captured[0]
+        assert payload["last_task_duration_seconds"] is None
+        assert payload["recent_task_durations_seconds"] == []
+        assert payload["gpu_utilization_pct"] is None
+
+
+@pytest.mark.unit
+class TestSampleGpuUtilizationPct:
+    """METRICS-MON R4.4: GPU utilization sampling helper."""
+
+    def test_returns_none_when_torch_unavailable(self):
+        """Import error swallowed → None (matches the rss_mb defaulting pattern)."""
+        import sys
+
+        from juniper_cascor_worker.worker import _sample_gpu_utilization_pct
+
+        with patch.dict(sys.modules, {"torch": None}):
+            assert _sample_gpu_utilization_pct() is None
+
+    def test_returns_none_when_no_cuda_device(self):
+        """torch.cuda.is_available()=False → None."""
+        from juniper_cascor_worker.worker import _sample_gpu_utilization_pct
+
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = False
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            assert _sample_gpu_utilization_pct() is None
+
+    def test_returns_float_when_cuda_available(self):
+        """torch.cuda.utilization() reading is wrapped in float()."""
+        from juniper_cascor_worker.worker import _sample_gpu_utilization_pct
+
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.utilization.return_value = 73  # NVML returns int 0-100
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            result = _sample_gpu_utilization_pct()
+        assert result == 73.0
+        assert isinstance(result, float), "must be float for stable JSON-serialized type vs rss_mb"
+
+    def test_returns_none_when_nvml_raises(self):
+        """Defensive: NVML can raise on misconfigured containers; helper must not propagate."""
+        from juniper_cascor_worker.worker import _sample_gpu_utilization_pct
+
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.utilization.side_effect = RuntimeError("nvml not loadable")
+        with patch.dict("sys.modules", {"torch": mock_torch}):
+            assert _sample_gpu_utilization_pct() is None
+
+
+@pytest.mark.unit
+class TestRecentTaskDurationsBounded:
+    """METRICS-MON R4.4: sliding window must stay bounded under sustained task load."""
+
+    def test_recent_durations_bounded_by_window(self):
+        """deque(maxlen=_RECENT_TASK_WINDOW) silently evicts older entries."""
+        from juniper_cascor_worker.worker import _RECENT_TASK_WINDOW
+
+        config = _make_ws_config()
+        agent = CascorWorkerAgent(config)
+        # Push 4× the window worth of entries.
+        for i in range(_RECENT_TASK_WINDOW * 4):
+            agent._recent_task_durations_seconds.append(float(i))
+        assert len(agent._recent_task_durations_seconds) == _RECENT_TASK_WINDOW
+        # Newest entries retained, oldest evicted (FIFO under maxlen).
+        first = next(iter(agent._recent_task_durations_seconds))
+        last = list(agent._recent_task_durations_seconds)[-1]
+        assert first == float(_RECENT_TASK_WINDOW * 4 - _RECENT_TASK_WINDOW)
+        assert last == float(_RECENT_TASK_WINDOW * 4 - 1)
+
 
 @pytest.mark.unit
 class TestMessageLoopDispatch:
