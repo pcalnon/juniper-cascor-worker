@@ -446,6 +446,62 @@ class TestMessageLoopDispatch:
         # _handle_task_assign should NOT be called for heartbeat messages
         mock_handle.assert_not_awaited()
 
+    @pytest.mark.asyncio
+    async def test_message_loop_emits_structured_warning_on_unrecognized_type(self, caplog):
+        """METRICS-MON R4.7 / R3.6 sweep follow-up.
+
+        ``_message_loop`` must emit a structured ``logger.warning`` line
+        (``juniper_cascor_worker_unrecognized_ws_frame``) with ``type`` +
+        ``worker_id`` extras when the server sends a frame whose ``type``
+        is not in the worker's recognized set. R2.2.6 added the production
+        emission as defense against future server-side schema drift that
+        escapes the static guard in
+        ``test_protocol_alignment.py::test_worker_does_not_emit_message_types_unknown_to_server``;
+        this test pins the live emission path.
+        """
+        # ``worker_id`` is generated inside the agent constructor (uuid4),
+        # not passed via WorkerConfig — pin it here so the structured-log
+        # assertion below has a stable expected value.
+        config = _make_ws_config()
+        agent = CascorWorkerAgent(config)
+        agent.worker_id = "r4-7-test-worker"
+
+        # ``some_future_type`` is intentionally not in the
+        # WorkerMessageType / cascor MessageType enum so the dispatch
+        # falls through to the structured-warning branch.
+        unknown_msg = json.dumps({"type": "some_future_type", "payload": "anything"})
+
+        mock_conn = AsyncMock()
+        call_count = 0
+
+        async def receive_side_effect():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return unknown_msg
+            agent._stop_event.set()
+            raise WorkerConnectionError("stopped")
+
+        mock_conn.receive.side_effect = receive_side_effect
+        agent._connection = mock_conn
+
+        with caplog.at_level("WARNING", logger="juniper_cascor_worker.worker"):
+            with pytest.raises(WorkerConnectionError):
+                await agent._message_loop()
+
+        # Filter to records emitted by the production emission site —
+        # other WARNINGs in the loop (e.g. binary-frame-out-of-context)
+        # would mask a regression here if we just searched the whole log.
+        unrecognized_records = [r for r in caplog.records if r.message == "juniper_cascor_worker_unrecognized_ws_frame"]
+        assert len(unrecognized_records) == 1, f"expected 1 structured warning, got {len(unrecognized_records)}: {[r.message for r in caplog.records]}"
+
+        record = unrecognized_records[0]
+        assert record.levelname == "WARNING"
+        # ``extra`` keys land on the LogRecord as direct attributes.
+        # Log shippers (Loki, etc.) parse these as structured fields.
+        assert getattr(record, "type", None) == "some_future_type"
+        assert getattr(record, "worker_id", None) == "r4-7-test-worker"
+
 
 @pytest.mark.unit
 class TestStopTerminatesRun:
