@@ -1,64 +1,89 @@
 ---
 #####################################################################################################################################################################################################
 # Project:       Juniper
-# File Name:     lockfile-update.yml (template)
+# Sub-Project:   JuniperCascorWorker
+# Application:   juniper_cascor_worker
+# File Name:     lockfile-update.yml
+# Author:        Paul Calnon
+# Version:       0.1.0
+#
+# Date Created:  2026-05-02
+# Last Modified: 2026-05-02
+#
+# License:       MIT License
+# Copyright:     Copyright (c) 2024-2026 Paul Calnon
 #
 # Description:
-#    Refresh pinned CI lockfiles weekly via PR. Drop into a target repo's
-#    `.github/workflows/lockfile-update.yml`. Each Juniper repo should
-#    expose a `util/generate_dep_docs.sh` (or equivalent) that regenerates
-#    `requirements_ci.txt` and `conda_environment_ci.yaml`. The workflow
-#    pushes the diff (if any) onto a new branch and opens a PR.
+#    Automatically updates requirements.lock when Dependabot pushes a dependency
+#    update to a dependabot/pip/** branch. Runs uv pip compile to regenerate
+#    the lockfile and commits the result so downstream Docker / CI builds
+#    stay in sync with the bumped dependency's transitive pins.
 #
-#    PRs are opened by `peter-evans/create-pull-request` using the
-#    workflow's GITHUB_TOKEN. No additional secret is required for the
-#    common case.
+#    Uses CROSS_REPO_DISPATCH_TOKEN (not GITHUB_TOKEN) so the push re-triggers CI.
+#    See juniper-ml/notes/V17_V18_CROSS_REPO_DISPATCH_TOKEN_SETUP_2026-05-02.md
+#    for the secret-provisioning walkthrough.
+#
+#    The previous lockfile was compiled with:
+#       uv pip compile pyproject.toml --no-emit-package torch -o requirements.lock
+#    This workflow preserves that invocation so the regeneration is
+#    bit-for-bit consistent with the existing lockfile header.
 #####################################################################################################################################################################################################
 
-name: Update Lockfiles
+name: Update Lockfile (Dependabot)
 
 on:
-  schedule:
-    - cron: '0 8 * * 1'  # weekly Monday 08:00 UTC
-  workflow_dispatch:
+  push:
+    branches:
+      - dependabot/pip/**
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  update:
-    name: Refresh CI lockfiles
+  update-lockfile:
+    name: Update requirements.lock
     runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          token: ${{ secrets.CROSS_REPO_DISPATCH_TOKEN }}
+          ref: ${{ github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: "3.12"
-          cache: pip
 
-      - name: Regenerate dependency lockfiles
+      - name: Install uv
+        run: pip install uv
+
+      - name: Regenerate requirements.lock
         run: |
-          if [ -f util/generate_dep_docs.sh ]; then
-            bash util/generate_dep_docs.sh
-          else
-            echo "::warning::util/generate_dep_docs.sh not found; nothing to refresh"
-            exit 0
-          fi
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       Juniper Cascor Worker - Regenerate Lockfile          ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
 
-      - name: Open PR if lockfiles changed
-        uses: peter-evans/create-pull-request@271a8d0340265f705aeb70568e08251a5f6ed72b  # v7.0.5
-        with:
-          branch: chore/lockfile-update
-          delete-branch: true
-          commit-message: 'chore(deps): refresh CI lockfiles'
-          title: 'chore(deps): refresh CI lockfiles'
-          body: |
-            Automated weekly refresh of CI lockfiles via
-            `util/generate_dep_docs.sh`.
-          labels: |
-            dependencies
-            automated
+          # --upgrade is required because uv pip compile reads the existing -o
+          # file as pins by default and won't bump transitive deps without it.
+          # --no-emit-package torch matches the existing lockfile header — torch
+          # is installed separately (see CI install steps) so we deliberately
+          # omit it from the compiled pin set.
+          uv pip compile pyproject.toml \
+            --no-emit-package torch \
+            --upgrade \
+            -o requirements.lock
+
+      - name: Commit updated lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add requirements.lock
+          if git diff --cached --quiet; then
+            echo "::notice::Lockfile already up to date — no commit needed"
+          else
+            git commit -m "[dependabot skip] Update requirements.lock"
+            git push
+          fi
