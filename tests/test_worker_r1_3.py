@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -186,8 +187,10 @@ class TestTaskAccounting:
         agent._connection = MagicMock()
 
         monotonic_values = iter([100.0, 100.25])
-        monkeypatch.setattr("juniper_cascor_worker.worker.time.monotonic", lambda: next(monotonic_values))
-        monkeypatch.setattr("juniper_cascor_worker.worker.time.time", lambda: 2000.0)
+        monkeypatch.setattr(
+            "juniper_cascor_worker.worker.time",
+            SimpleNamespace(monotonic=lambda: next(monotonic_values), time=lambda: 2000.0),
+        )
 
         await agent._handle_task_assign({"task_id": "t-duration"})
 
