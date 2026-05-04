@@ -52,8 +52,13 @@ def _import_cascor_message_type():
         candidate_paths.append(Path(env_path))
 
     here = Path(__file__).resolve()
-    candidate_paths.append(here.parents[3] / "juniper-cascor" / "src")  # worktrees/<wt>/tests
-    candidate_paths.append(here.parents[2] / "juniper-cascor" / "src")  # repo root layout
+    # The automation runner checks this repository out directly at
+    # /workspace, which is shallower than the local Juniper worktree layout.
+    # Only add conventional sibling paths that exist in the current path depth.
+    if len(here.parents) > 3:
+        candidate_paths.append(here.parents[3] / "juniper-cascor" / "src")  # worktrees/<wt>/tests
+    if len(here.parents) > 2:
+        candidate_paths.append(here.parents[2] / "juniper-cascor" / "src")  # repo root layout
 
     for path in candidate_paths:
         protocol_file = path / "api" / "workers" / "protocol.py"
