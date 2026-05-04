@@ -203,7 +203,10 @@ class TestHandleTaskAssign:
         }
         mock_tensors = {"weights": test_weights}
 
-        with patch("juniper_cascor_worker.worker.asyncio.to_thread", new_callable=AsyncMock, return_value=(mock_result_dict, mock_tensors)), patch("juniper_cascor_worker.worker.time.monotonic", side_effect=[10.0, 10.25]), patch("juniper_cascor_worker.worker.time.time", return_value=1234.5):
+        fake_time = MagicMock()
+        fake_time.monotonic.side_effect = [10.0, 10.25, 10.25]
+        fake_time.time.return_value = 1234.5
+        with patch("juniper_cascor_worker.worker.asyncio.to_thread", new_callable=AsyncMock, return_value=(mock_result_dict, mock_tensors)), patch("juniper_cascor_worker.worker.time", fake_time):
             await agent._handle_task_assign(task_msg)
 
         # Verify result JSON was sent
@@ -769,7 +772,10 @@ class TestTaskTimeout:
             return {}, {}
 
         with patch("juniper_cascor_worker.worker.asyncio.to_thread", side_effect=slow_to_thread):
-            with patch("juniper_cascor_worker.worker.asyncio.wait_for", side_effect=asyncio.TimeoutError()), patch("juniper_cascor_worker.worker.time.monotonic", side_effect=[20.0, 22.5]), patch("juniper_cascor_worker.worker.time.time", return_value=5678.0):
+            fake_time = MagicMock()
+            fake_time.monotonic.side_effect = [20.0, 22.5, 22.5]
+            fake_time.time.return_value = 5678.0
+            with patch("juniper_cascor_worker.worker.asyncio.wait_for", side_effect=asyncio.TimeoutError()), patch("juniper_cascor_worker.worker.time", fake_time):
                 await agent._handle_task_assign(task_msg)
 
         # Verify error result was sent
