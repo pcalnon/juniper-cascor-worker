@@ -1,7 +1,7 @@
 # Developer Cheatsheet — juniper-cascor-worker
 
-**Version**: 1.0.0
-**Date**: 2026-03-20
+**Version**: 1.1.0
+**Date**: 2026-05-04
 **Project**: juniper-cascor-worker
 
 ---
@@ -191,6 +191,55 @@ WorkerError (base)
 | `WorkerConnectionError` in legacy mode | Manager not running or wrong host/port/authkey | Verify manager settings and `CASCOR_AUTHKEY` match |
 | `WorkerError` in legacy mode | CasCor source not on `sys.path` | Use `--cascor-path` CLI flag or install CasCor source |
 | `WorkerConfigError` in legacy mode | Invalid port or worker count | Port must be 1-65535, workers must be >= 1 |
+
+---
+
+## CI and Automation Runbook
+
+### GitHub Actions Layout
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `.github/workflows/ci.yml` | Pushes, pull requests, manual dispatch | Required CI quality gate |
+| `.github/workflows/security-scan.yml` | Weekly Monday schedule, manual dispatch | Scheduled Bandit and `pip-audit` scan |
+| `.github/workflows/publish.yml` | Published GitHub releases | Build, publish to TestPyPI, verify install, then publish to PyPI |
+| `.github/workflows/claude.yml` | `@claude` issue and PR comments/reviews | Runs the Claude Code assistant workflow; canonical copy lives in `juniper-ml` |
+
+Workflow actions are SHA-pinned with adjacent version comments. For GitHub Actions Dependabot PRs, expect the `uses:` SHA and version comment to move together.
+
+### Required CI Gate
+
+`ci.yml` aggregates these jobs in `required-checks`:
+
+1. `pre-commit` on Python 3.12, 3.13, and 3.14.
+2. `docs`, which runs `python scripts/check_doc_links.py --exclude templates --exclude history`.
+3. `unit-tests` on Linux for Python 3.12, 3.13, and 3.14 plus macOS Python 3.12.
+4. `integration-tests` on Python 3.12, 3.13, and 3.14. Failures are reported as warnings during the shakedown cycle.
+5. `build`, which builds wheel and sdist artifacts and runs `twine check`.
+6. `dependency-docs`, which runs `bash scripts/generate_dep_docs.sh` and uploads generated dependency files.
+7. `security`, which runs Gitleaks, Bandit SARIF upload, and `pip-audit`.
+
+When a PR fails the quality gate, inspect the failed upstream job first; `required-checks` usually only reports the aggregate failure.
+
+### Dependabot Updates
+
+Dependabot is configured in `.github/dependabot.yml`:
+
+| Ecosystem | Schedule | PR Limit | Labels | Commit Prefix |
+|-----------|----------|----------|--------|---------------|
+| `pip` | Weekly Monday 09:00 America/New_York | 5 | `dependencies`, `security` | `deps` |
+| `github-actions` | Weekly Monday | 3 | `dependencies`, `ci` | `ci` |
+
+For GitHub Actions PRs, verify that only the intended `uses:` SHA and version comment changed unless Dependabot explicitly updates multiple actions. For Python dependency PRs, run the affected tests plus the coverage command when dependency behavior could affect task execution.
+
+### Common CI Pitfalls
+
+| Symptom | Likely Cause | Fix |
+|---------|--------------|-----|
+| Action version comment disagrees with the SHA | Manual edit or incomplete Dependabot update | Reconcile the `uses:` SHA with the upstream release tag before merging |
+| `docs` job fails on an internal link | Renamed or moved markdown target | Run `python scripts/check_doc_links.py --exclude templates --exclude history` locally and update the link |
+| Linux torch install differs from macOS | Linux CI uses the CPU-only PyTorch index; macOS uses PyPI | Keep OS-specific torch installation branches in `ci.yml` |
+| `security` fails on `pip-audit` after a runner image change | Newly reported dependency or runner-provided package vulnerability | Check the generated requirements file and only add ignores for documented no-fix cases |
 
 ---
 
