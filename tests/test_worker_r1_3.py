@@ -186,7 +186,7 @@ class TestTaskAccounting:
         agent._handle_task_assign_body = AsyncMock(return_value=True)
         agent._connection = MagicMock()
 
-        monotonic_values = iter([100.0, 100.25])
+        monotonic_values = iter([100.0, 100.25, 100.25])
         monkeypatch.setattr(
             "juniper_cascor_worker.worker.time",
             SimpleNamespace(monotonic=lambda: next(monotonic_values), time=lambda: 2000.0),
