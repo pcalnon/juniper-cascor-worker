@@ -2,9 +2,9 @@
 
 ## Navigation Guide to juniper-cascor-worker Documentation
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 **Status:** Active
-**Last Updated:** March 3, 2026
+**Last Updated:** May 4, 2026
 **Project:** Juniper - Distributed CasCor Training Worker
 
 ---
@@ -40,10 +40,10 @@
 
 | File | Lines | Type | Purpose |
 |------|-------|------|---------|
-| **DOCUMENTATION_OVERVIEW.md** | ~90 | Overview | This file -- navigation index |
+| **DOCUMENTATION_OVERVIEW.md** | ~100 | Overview | This file -- navigation index |
 | **QUICK_START.md** | ~100 | Tutorial | Install, configure, and run a worker in 5 minutes |
 | **REFERENCE.md** | ~230 | Reference | Complete Python API, CLI, configuration, and exception reference |
-| **DEVELOPER_CHEATSHEET.md** | ~100 | Cheatsheet | Quick-reference card for common development tasks |
+| **DEVELOPER_CHEATSHEET.md** | ~210 | Cheatsheet | Quick-reference card for common development tasks and CI automation |
 
 ### Root Directory
 
@@ -57,20 +57,23 @@
 
 ## Ecosystem Context
 
-`juniper-cascor-worker` is a distributed training worker that connects to a juniper-cascor manager process and spawns local worker processes to accelerate candidate training.
+`juniper-cascor-worker` is a distributed training worker that connects remote training hardware to the `juniper-cascor` service.
+
+The default path is WebSocket-based: `CascorWorkerAgent` connects to `/ws/v1/workers`, registers worker capabilities, receives JSON task metadata plus binary tensor frames, runs candidate training locally, and returns `task_result` messages with output tensors. The legacy `CandidateTrainingWorker` path still exists for deprecated BaseManager deployments and is only active when the CLI is run with `--legacy`.
 
 ### Dependency Graph
 
-```
-juniper-cascor-worker ──IPC (multiprocessing queues)──> juniper-cascor (manager, port 50000)
-juniper-ml ──meta-package──> juniper-cascor-worker
+```text
+juniper-ml[worker] --> juniper-cascor-worker --WebSocket--> juniper-cascor
+                                                |
+                                                +-- legacy BaseManager mode with --legacy
 ```
 
 ### Compatibility
 
 | juniper-cascor-worker | juniper-cascor | juniper-data | juniper-canopy |
 |-----------------------|----------------|--------------|----------------|
-| 0.1.x | 0.3.x | 0.4.x | 0.2.x |
+| 0.3.x | 0.3.x | 0.4.x | 0.2.x |
 
 ---
 
@@ -78,7 +81,7 @@ juniper-ml ──meta-package──> juniper-cascor-worker
 
 ### Upstream Service
 
-- **juniper-cascor** -- [Training Service](https://github.com/pcalnon/juniper-cascor) (provides the `CandidateTrainingManager` that this worker connects to)
+- **juniper-cascor** -- [Training Service](https://github.com/pcalnon/juniper-cascor) (provides the `/ws/v1/workers` endpoint and the deprecated `CandidateTrainingManager` legacy path)
 
 ### Meta-Package
 
@@ -86,8 +89,8 @@ juniper-ml ──meta-package──> juniper-cascor-worker
 
 ---
 
-**Last Updated:** March 3, 2026
-**Version:** 0.1.0
+**Last Updated:** May 4, 2026
+**Version:** 0.2.0
 **Maintainer:** Paul Calnon
 
 > See the [Juniper Ecosystem Guide](https://github.com/pcalnon/juniper-ml/blob/main/CLAUDE.md) for the full project map and dependency graph.
