@@ -426,7 +426,7 @@ jobs:
           bandit -r juniper_cascor_worker -f sarif -o reports/security/bandit.sarif --exit-zero
 
       - name: Upload Bandit SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@95e58e9a2cdfd71adc6e0353d5c52f41a045d225  # v4.35.2
+        uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7  # v4.35.3
         if: always()
         with:
           sarif_file: reports/security/bandit.sarif
@@ -460,13 +460,59 @@ jobs:
           retention-days: 30
 
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # Lockfile Check: Verify requirements.lock matches pyproject.toml (P-18)
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # Mirrors the canonical pattern from juniper-cascor / juniper-data /
+  # juniper-canopy. juniper-cascor-worker ships a committed lockfile (the
+  # ``test`` extra picks up torch + numpy via the cascor stack), so it
+  # qualifies for the freshness gate. The two sibling client repos
+  # (juniper-data-client, juniper-cascor-client) intentionally stay
+  # lockfile-free per their own lockfile-update.yml docstrings.
+  lockfile-check:
+    name: Lockfile Freshness
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_TEST_VERSION }}
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Check lockfile freshness
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       juniper-cascor-worker - Lockfile Freshness Check     ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+
+          uv pip compile pyproject.toml \
+            --no-emit-package torch \
+            -o /tmp/requirements.lock.check
+
+          # Skip the first two lines of each file (uv writes a header
+          # with the regenerate command + the timestamp; both vary
+          # innocuously).
+          if ! diff -u <(tail -n +3 requirements.lock) <(tail -n +3 /tmp/requirements.lock.check); then
+            echo ""
+            echo "::error::requirements.lock is stale — run: uv pip compile pyproject.toml --no-emit-package torch -o requirements.lock"
+            exit 1
+          fi
+
+          echo "::notice::requirements.lock is up to date ✓"
+
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
   # Required Checks Aggregator: Final quality gate
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   required-checks:
     name: Quality Gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [pre-commit, unit-tests, integration-tests, build, dependency-docs, security, docs]
+    needs: [pre-commit, unit-tests, integration-tests, build, dependency-docs, security, docs, lockfile-check]
 
     steps:
       - name: Check Quality Gate Status

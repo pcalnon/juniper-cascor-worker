@@ -22,6 +22,24 @@
 
 ---
 
+## CI and Security Workflows
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `.github/workflows/ci.yml` | Pushes, PRs, manual dispatch | Main quality gate: pre-commit, docs links, tests, build, dependency docs, and security scans |
+| `.github/workflows/codeql.yml` | Pushes to `main`/`develop`, PRs to `main`, weekly schedule | CodeQL semantic SAST for Python with `security-and-quality` queries |
+| `.github/workflows/security-scan.yml` | Weekly schedule, manual dispatch | Scheduled Bandit and pip-audit scan with uploaded security reports |
+
+Security scan behavior:
+
+- `ci.yml` runs Gitleaks, Bandit SARIF upload, and pip-audit as the PR-facing `security` job.
+- Bandit writes `reports/security/bandit.sarif`; `github/codeql-action/upload-sarif` publishes it to GitHub code scanning.
+- `codeql.yml` uses the CodeQL `init`, `autobuild`, and `analyze` actions for Python.
+- GitHub Actions are SHA-pinned with version comments. Dependabot bumps should update both the pinned SHA and the trailing version comment together.
+- The pip-audit jobs currently ignore `CVE-2026-3219` for the runner-provided pip version until an upstream fix is available; re-check that exception when changing the audit workflow.
+
+---
+
 ## CLI Usage
 
 ### Start a Worker
