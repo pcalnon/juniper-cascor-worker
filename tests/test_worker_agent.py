@@ -203,7 +203,10 @@ class TestHandleTaskAssign:
         }
         mock_tensors = {"weights": test_weights}
 
-        with patch("juniper_cascor_worker.worker.asyncio.to_thread", new_callable=AsyncMock, return_value=(mock_result_dict, mock_tensors)):
+        fake_time = MagicMock()
+        fake_time.monotonic.side_effect = [10.0, 10.25, 10.25]
+        fake_time.time.return_value = 1234.5
+        with patch("juniper_cascor_worker.worker.asyncio.to_thread", new_callable=AsyncMock, return_value=(mock_result_dict, mock_tensors)), patch("juniper_cascor_worker.worker.time", fake_time):
             await agent._handle_task_assign(task_msg)
 
         # Verify result JSON was sent
@@ -219,6 +222,15 @@ class TestHandleTaskAssign:
         # Verify binary frame was sent for weights
         send_bytes_calls = mock_conn.send_bytes.call_args_list
         assert len(send_bytes_calls) == 1
+
+        # Verify METRICS-MON R4.4 task-accounting fields are populated by the
+        # real task lifecycle, not just by tests that seed heartbeat fields.
+        assert agent._in_flight_tasks == 0
+        assert agent._tasks_completed == 1
+        assert agent._tasks_failed == 0
+        assert agent._last_task_completed_at == 1234.5
+        assert agent._last_task_duration_seconds == 0.25
+        assert list(agent._recent_task_durations_seconds) == [0.25]
 
 
 @pytest.mark.unit
@@ -749,7 +761,7 @@ class TestTaskTimeout:
             "type": "task_assign",
             "task_id": "task-timeout-001",
             "candidate_index": 0,
-            "candidate_data": {"input_size": 3, "activation_name": "sigmoid"},
+            "candidate_data": {"input_size": 3, "activation_name": "sigmoid", "candidate_uuid": "candidate-timeout-uuid"},
             "training_params": {"epochs": 100},
             "tensor_manifest": {"candidate_input": {}, "residual_error": {}},
         }
@@ -760,7 +772,10 @@ class TestTaskTimeout:
             return {}, {}
 
         with patch("juniper_cascor_worker.worker.asyncio.to_thread", side_effect=slow_to_thread):
-            with patch("juniper_cascor_worker.worker.asyncio.wait_for", side_effect=asyncio.TimeoutError()):
+            fake_time = MagicMock()
+            fake_time.monotonic.side_effect = [20.0, 22.5, 22.5]
+            fake_time.time.return_value = 5678.0
+            with patch("juniper_cascor_worker.worker.asyncio.wait_for", side_effect=asyncio.TimeoutError()), patch("juniper_cascor_worker.worker.time", fake_time):
                 await agent._handle_task_assign(task_msg)
 
         # Verify error result was sent
@@ -769,12 +784,22 @@ class TestTaskTimeout:
         error_msg = send_json_calls[0][0][0]
         assert error_msg["type"] == "task_result"
         assert error_msg["task_id"] == "task-timeout-001"
+        assert error_msg["candidate_uuid"] == "candidate-timeout-uuid"
         assert error_msg["success"] is False
         assert "timed out" in error_msg["error_message"]
         assert error_msg["tensor_manifest"] == {}
 
         # Verify no binary frames were sent (no successful result)
         mock_conn.send_bytes.assert_not_awaited()
+
+        # Timeout failures still need bounded duration telemetry so operators
+        # can see slow failure distributions in heartbeat payloads.
+        assert agent._in_flight_tasks == 0
+        assert agent._tasks_completed == 0
+        assert agent._tasks_failed == 1
+        assert agent._last_task_completed_at == 5678.0
+        assert agent._last_task_duration_seconds == 2.5
+        assert list(agent._recent_task_durations_seconds) == [2.5]
 
     @pytest.mark.asyncio
     async def test_task_timeout_default_config(self):
