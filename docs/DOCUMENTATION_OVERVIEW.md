@@ -30,6 +30,7 @@
 | **See development conventions** | [AGENTS.md](../AGENTS.md) | Root |
 | **See version history** | [CHANGELOG.md](../CHANGELOG.md) | Root |
 | **Quick-reference dev tasks** | [DEVELOPER_CHEATSHEET.md](DEVELOPER_CHEATSHEET.md) | docs/ |
+| **Understand CI and security scans** | [DEVELOPER_CHEATSHEET.md](DEVELOPER_CHEATSHEET.md#ci-and-security-workflows) | docs/ |
 | **Run tests** | [AGENTS.md](../AGENTS.md) | Root |
 
 ---
@@ -43,7 +44,7 @@
 | **DOCUMENTATION_OVERVIEW.md** | ~90 | Overview | This file -- navigation index |
 | **QUICK_START.md** | ~100 | Tutorial | Install, configure, and run a worker in 5 minutes |
 | **REFERENCE.md** | ~230 | Reference | Complete Python API, CLI, configuration, and exception reference |
-| **DEVELOPER_CHEATSHEET.md** | ~100 | Cheatsheet | Quick-reference card for common development tasks |
+| **DEVELOPER_CHEATSHEET.md** | ~200 | Cheatsheet | Quick-reference card for common development tasks, CI, and security scans |
 
 ### Root Directory
 
