@@ -18,6 +18,7 @@ import pytest
 
 from juniper_cascor_worker.config import WorkerConfig
 from juniper_cascor_worker.constants import MSG_TYPE_HEARTBEAT
+from juniper_cascor_worker.exceptions import WorkerConnectionError
 from juniper_cascor_worker.worker import CascorWorkerAgent
 
 
@@ -91,6 +92,30 @@ class TestReadinessTick:
         agent._registered = True
         agent._readiness_tick()  # must not raise
 
+    @pytest.mark.asyncio
+    async def test_disconnect_resets_registered_flag_after_registered_loop_teardown(self, monkeypatch):
+        """A closed WS loop must make readiness fail until the next register ack."""
+        agent = _agent()
+
+        mock_conn = AsyncMock()
+        mock_conn.receive_json.side_effect = [
+            {"type": "connection_established"},
+            {"type": "registration_ack"},
+        ]
+        mock_conn.receive.side_effect = WorkerConnectionError("socket closed")
+
+        async def _stop_after_reconnect_delay(_seconds):
+            agent._stop_event.set()
+
+        monkeypatch.setattr(asyncio, "sleep", _stop_after_reconnect_delay)
+
+        await agent._run_inner(lambda **_kwargs: mock_conn)
+
+        assert agent._registered is False
+        mock_conn.close.assert_awaited_once()
+        with pytest.raises(RuntimeError, match="registration"):
+            agent._readiness_tick()
+
 
 @pytest.mark.unit
 class TestHeartbeatEnrichment:
@@ -153,6 +178,22 @@ class TestTaskAccounting:
         assert agent._tasks_completed == 1
         assert agent._tasks_failed == 0
         assert agent._last_task_completed_at is not None
+
+    @pytest.mark.asyncio
+    async def test_successful_task_records_duration_for_next_heartbeat(self, monkeypatch):
+        agent = _agent()
+        agent._handle_task_assign_body = AsyncMock(return_value=True)
+        agent._connection = MagicMock()
+
+        monotonic_values = iter([100.0, 100.25])
+        monkeypatch.setattr("juniper_cascor_worker.worker.time.monotonic", lambda: next(monotonic_values))
+        monkeypatch.setattr("juniper_cascor_worker.worker.time.time", lambda: 2000.0)
+
+        await agent._handle_task_assign({"task_id": "t-duration"})
+
+        assert agent._last_task_completed_at == 2000.0
+        assert agent._last_task_duration_seconds == pytest.approx(0.25)
+        assert list(agent._recent_task_durations_seconds) == [pytest.approx(0.25)]
 
     @pytest.mark.asyncio
     async def test_failed_task_increments_failed_counter(self):
