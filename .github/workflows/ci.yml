@@ -401,8 +401,15 @@ jobs:
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          fail: true
+          # gitleaks-action v2.3.9 ships as a Node.js 20 action.
+          # GitHub forces Node 24 on 2026-06-02; opt in now to eliminate
+          # the deprecation warning and ensure continued operation past
+          # the cutover. Drop this once gitleaks-action publishes a
+          # release pinned to node24 (upstream PR #215).
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+        # gitleaks-action v2.3.9 has no `fail` input — passing it triggers
+        # "Unexpected input(s) 'fail'" warnings in CI. The action exits
+        # non-zero on leaks by default, which is the behavior we want.
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
