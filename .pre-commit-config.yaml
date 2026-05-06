@@ -114,6 +114,24 @@ repos:
         files: ^(juniper_cascor_worker|tests)/
 
   # ═══════════════════════════════════════════════════════════════════════════
+  # Async-route audit (Phase 1 wiring, disabled state).
+  # See juniper-ml notes/ASYNC_ROUTE_AUDIT_HOOK_MIGRATION_PLAN.md.
+  # `stages: [manual]` keeps this from firing on regular commits.
+  # Run on demand:  pre-commit run --hook-stage manual ruff-async-audit
+  # Phase 2 flips to `stages: [pre-commit, manual]` and adds CI lane.
+  # Phase 4 hard-fails. Phase 0 enumeration confirmed zero violations.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.2
+    hooks:
+      - id: ruff
+        alias: ruff-async-audit
+        name: Async-route audit (BUG-JD-10 class)
+        args: [--select, ASYNC, --exit-zero]
+        files: ^juniper_cascor_worker/.*\.py$
+        stages: [manual]
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # Python Linting - Flake8 (Source Code)
   # ═══════════════════════════════════════════════════════════════════════════
   - repo: https://github.com/pycqa/flake8
