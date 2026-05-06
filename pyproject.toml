@@ -139,3 +139,25 @@ exclude_lines = [
 ]
 show_missing = true
 precision = 2
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Ruff — async-route audit only (Phase 1 wiring, disabled state).
+# Worker's primary lint stack stays flake8 + black + isort + bandit + mypy.
+# Ruff is added solely for the ASYNC* ruleset (BUG-JD-10 class prevention),
+# enforced via a manual-stage pre-commit hook. See juniper-ml notes/
+# ASYNC_ROUTE_AUDIT_HOOK_MIGRATION_PLAN.md.
+# Phase 0 enumeration (juniper-ml notes/ASYNC_ROUTE_VIOLATIONS_2026-05-06.md
+# §2.1) confirmed zero violations in this repo — no per-file-ignores needed.
+# ═══════════════════════════════════════════════════════════════════════════
+[tool.ruff]
+# Note: ruff >=0.15 caps line-length at 320. Since this ruff config is only
+# used for the ASYNC* ruleset (not formatting), the value doesn't affect
+# output; pinned at the 320 cap so the config parses without error.
+line-length = 320
+target-version = "py312"
+
+[tool.ruff.lint]
+# Empty `select` so regular `ruff check` is a no-op. The ASYNC* ruleset is
+# explicitly opted into via the pre-commit hook's `--select ASYNC` arg.
+select = []
