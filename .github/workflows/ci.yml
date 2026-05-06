@@ -116,6 +116,41 @@ jobs:
           python scripts/check_doc_links.py --exclude templates --exclude history
 
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # Async-route audit (Phase 2 — soft-fail visibility).
+  # Catches the BUG-JD-10 bug class (sync-blocking calls inside async def
+  # route handlers). `--exit-zero` + `continue-on-error: true` so violations
+  # surface as PR annotations without blocking merge or showing the step
+  # as red. Phase 4 will drop both flags.
+  # See juniper-ml notes/ASYNC_ROUTE_AUDIT_HOOK_MIGRATION_PLAN.md §4.
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  async-route-audit:
+    name: Async-route audit (BUG-JD-10 class, soft-fail)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Install ruff
+        run: pip install "ruff==0.15.6"
+
+      - name: Run async-route audit
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║   juniper-cascor-worker - Async-route audit (BUG-JD-10)   ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          # --exit-zero + continue-on-error: belt and suspenders so the
+          # step exits 0 (no red indicator) while annotations still
+          # render via --output-format=github. Phase 4 drops both.
+          ruff check --select ASYNC --exit-zero --output-format=github juniper_cascor_worker/
+
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
   # Unit Tests: Run unit tests with coverage enforcement
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   unit-tests:
