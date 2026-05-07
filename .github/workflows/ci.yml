@@ -116,17 +116,15 @@ jobs:
           python scripts/check_doc_links.py --exclude templates --exclude history
 
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
-  # Async-route audit (Phase 2 — soft-fail visibility).
+  # Async-route audit (Phase 4 — enforced).
   # Catches the BUG-JD-10 bug class (sync-blocking calls inside async def
-  # route handlers). `--exit-zero` + `continue-on-error: true` so violations
-  # surface as PR annotations without blocking merge or showing the step
-  # as red. Phase 4 will drop both flags.
+  # route handlers). Hard-fails on any new violation. Phase 0 enumeration
+  # found zero violations in this repo; this lane is a regression guard.
   # See juniper-ml notes/ASYNC_ROUTE_AUDIT_HOOK_MIGRATION_PLAN.md §4.
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   async-route-audit:
-    name: Async-route audit (BUG-JD-10 class, soft-fail)
+    name: Async-route audit (BUG-JD-10 class)
     runs-on: ubuntu-latest
-    continue-on-error: true
 
     steps:
       - name: Checkout Code
@@ -145,10 +143,7 @@ jobs:
           echo "╔════════════════════════════════════════════════════════════╗"
           echo "║   juniper-cascor-worker - Async-route audit (BUG-JD-10)   ║"
           echo "╚════════════════════════════════════════════════════════════╝"
-          # --exit-zero + continue-on-error: belt and suspenders so the
-          # step exits 0 (no red indicator) while annotations still
-          # render via --output-format=github. Phase 4 drops both.
-          ruff check --select ASYNC --exit-zero --output-format=github juniper_cascor_worker/
+          ruff check --select ASYNC --output-format=github juniper_cascor_worker/
 
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   # Unit Tests: Run unit tests with coverage enforcement

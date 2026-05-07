@@ -114,13 +114,11 @@ repos:
         files: ^(juniper_cascor_worker|tests)/
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Async-route audit (Phase 2 — soft-fail visibility).
+  # Async-route audit (Phase 4 — enforced).
   # See juniper-ml notes/ASYNC_ROUTE_AUDIT_HOOK_MIGRATION_PLAN.md.
-  # `--exit-zero` keeps violations as warnings (won't block commits).
-  # CI lane in .github/workflows/ci.yml runs the same check with
-  # `continue-on-error: true` so PRs see annotations without blocking
-  # merge. Phase 4 will drop both `--exit-zero` and `continue-on-error`.
-  # Phase 0 enumeration confirmed zero violations in this repo.
+  # Hard-fails on any new ASYNC* violation. Phase 0 enumeration found
+  # zero violations in this repo and Phase 3 was a no-op; this hook is
+  # purely a regression guard for new async route handlers.
   # ═══════════════════════════════════════════════════════════════════════════
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.2
@@ -128,7 +126,7 @@ repos:
       - id: ruff
         alias: ruff-async-audit
         name: Async-route audit (BUG-JD-10 class)
-        args: [--select, ASYNC, --exit-zero]
+        args: [--select, ASYNC]
         files: ^juniper_cascor_worker/.*\.py$
         stages: [pre-commit, manual]
 
