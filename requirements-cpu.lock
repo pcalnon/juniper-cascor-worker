@@ -6,23 +6,31 @@
 # CUDA wheels that the GPU lock would otherwise pull in transitively.
 #
 # Regeneration command:
-#   echo "torch==2.10.0+cpu" > /tmp/torch-cpu-override
+#   echo "torch==2.9.1+cpu" > /tmp/torch-cpu-override
 #   uv pip compile pyproject.toml \
+#     --extra-index-url https://download.pytorch.org/whl/cpu \
 #     --no-emit-package torch \
 #     --override /tmp/torch-cpu-override \
 #     -o requirements-cpu.lock
 #
 # Bump the torch pin in the override file when upgrading torch; everything
-# else flows through to the lock automatically.
+# else flows through to the lock automatically. The +cpu local-version
+# segment is required so uv resolves against the CPU wheel (which omits
+# the nvidia-* transitive deps); the segment is matched on the
+# --extra-index-url above.
 #
 # Companion lock with full NVIDIA stack: ``requirements.lock`` (preserved
 # as the legacy default for dev/laptop GPU installs).
+annotated-types==0.7.0
+    # via pydantic
 filelock==3.25.2
     # via torch
 fsspec==2026.2.0
     # via torch
 jinja2==3.1.6
     # via torch
+juniper-cascor-protocol==0.1.0
+    # via juniper-cascor-worker (pyproject.toml)
 markupsafe==3.0.3
     # via jinja2
 mpmath==1.3.0
@@ -30,13 +38,25 @@ mpmath==1.3.0
 networkx==3.6.1
     # via torch
 numpy==2.4.3
-    # via juniper-cascor-worker (pyproject.toml)
+    # via
+    #   juniper-cascor-worker (pyproject.toml)
+    #   juniper-cascor-protocol
+pydantic==2.13.4
+    # via juniper-cascor-protocol
+pydantic-core==2.46.4
+    # via pydantic
 setuptools==70.2.0
     # via torch
 sympy==1.14.0
     # via torch
 typing-extensions==4.15.0
-    # via torch
+    # via
+    #   pydantic
+    #   pydantic-core
+    #   torch
+    #   typing-inspection
+typing-inspection==0.4.2
+    # via pydantic
 websockets==16.0
     # via juniper-cascor-worker (pyproject.toml)
 

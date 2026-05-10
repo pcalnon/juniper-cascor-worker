@@ -553,6 +553,62 @@ jobs:
 
           echo "::notice::requirements.lock satisfies pyproject.toml ✓"
 
+      - name: Check requirements-cpu.lock contains every pyproject dep
+        # Constraint-mode regen of requirements-cpu.lock is non-trivial because
+        # it requires --extra-index-url to the PyTorch CPU index and an
+        # --override torch==X.Y+cpu pin (see the file header for the canonical
+        # command). Until that resolution path is stable in CI, we use a
+        # cheaper assertion: every name-form dep declared in [project]
+        # dependencies must appear pinned in the CPU lockfile. Catches the
+        # 2026-05-10 regression where juniper-cascor-protocol was added to
+        # pyproject but never emitted into requirements-cpu.lock, breaking
+        # the worker container at import time.
+        run: |
+          python3 - <<'PY'
+          import re
+          import sys
+          import tomllib
+
+          with open("pyproject.toml", "rb") as f:
+              deps = tomllib.load(f)["project"]["dependencies"]
+
+          # Strip version specifiers / extras / env markers, leaving the
+          # canonical PEP 503 normalised package name.
+          name_re = re.compile(r"^[A-Za-z0-9_.-]+")
+          required = {
+              name_re.match(d).group(0).lower().replace("_", "-")
+              for d in deps
+              if name_re.match(d)
+          }
+
+          # torch is intentionally excluded from the CPU lockfile because the
+          # Dockerfile installs it from the PyTorch CPU index (matches
+          # --no-emit-package torch in the regen command).
+          required.discard("torch")
+
+          with open("requirements-cpu.lock") as f:
+              locked = {
+                  line.split("==", 1)[0].strip().lower().replace("_", "-")
+                  for line in f
+                  if line and not line.startswith((" ", "\t", "#"))
+                  and "==" in line
+              }
+
+          missing = sorted(required - locked)
+          if missing:
+              print(
+                  "::error::requirements-cpu.lock is missing pyproject deps: "
+                  + ", ".join(missing)
+                  + " — regenerate with the command in the lockfile header"
+              )
+              sys.exit(1)
+
+          print(
+              f"::notice::requirements-cpu.lock contains all "
+              f"{len(required)} pyproject deps ✓"
+          )
+          PY
+
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   # Required Checks Aggregator: Final quality gate
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
