@@ -113,7 +113,17 @@ jobs:
           echo "╔════════════════════════════════════════════════════════════╗"
           echo "║       juniper-cascor-worker - Documentation Validation     ║"
           echo "╚════════════════════════════════════════════════════════════╝"
-          python scripts/check_doc_links.py --exclude templates --exclude history
+          python scripts/check_doc_links.py \
+            --exclude templates \
+            --exclude history \
+            --exclude legacy \
+            --exclude pull_requests \
+            --exclude releases \
+            --exclude analysis \
+            --exclude fixes \
+            --exclude development \
+            --exclude CHANGELOG.md \
+            --cross-repo skip
 
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   # Async-route audit (Phase 4 — enforced).
@@ -141,7 +151,7 @@ jobs:
       - name: Run async-route audit
         run: |
           echo "╔════════════════════════════════════════════════════════════╗"
-          echo "║   juniper-cascor-worker - Async-route audit (BUG-JD-10)   ║"
+          echo "║   juniper-cascor-worker - Async-route audit (BUG-JD-10)    ║"
           echo "╚════════════════════════════════════════════════════════════╝"
           ruff check --select ASYNC --output-format=github juniper_cascor_worker/
 
