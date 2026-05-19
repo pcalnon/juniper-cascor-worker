@@ -35,6 +35,9 @@ on:
   push:
     branches:
       - dependabot/pip/**
+  pull_request:
+    paths:
+      - pyproject.toml
 
 permissions:
   contents: write
@@ -43,14 +46,26 @@ jobs:
   update-lockfile:
     name: Update requirements.lock
     runs-on: ubuntu-latest
-    if: github.actor == 'dependabot[bot]'
+    # Run for:
+    #   - any push to a dependabot/pip/** branch (the original trigger), AND
+    #   - pull_request events from this repo's own branches (covers
+    #     manual pyproject.toml edits — e.g. min-version bumps that
+    #     leave main red after merge). Skip PRs from forks since they
+    #     cannot push back with our token.
+    # Replicates juniper-canopy PR #250 / juniper-data PR #122 hardening.
+    if: |
+      (github.event_name == 'push' && github.actor == 'dependabot[bot]') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           token: ${{ secrets.CROSS_REPO_DISPATCH_TOKEN }}
-          ref: ${{ github.ref }}
+          # For pull_request events, check out the PR head branch (not the
+          # merge ref) so the regen commit can be pushed back. ${{ github.ref }}
+          # remains correct for push events on dependabot/pip/**.
+          ref: ${{ github.head_ref || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
