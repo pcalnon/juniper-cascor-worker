@@ -108,12 +108,22 @@ jobs:
         with:
           python-version: "3.14"
 
+      # Wave 2 of the doc-link migration plan
+      # (juniper-ml notes/JUNIPER_DOC_TOOLS_PYPI_MIGRATION_PLAN_2026-05-18.md):
+      # the validator is installed from PyPI instead of run from the
+      # inline scripts/check_doc_links.py copy. The inline copy stays in
+      # place through Wave 4 so this swap remains a one-line revert.
+      - name: Install juniper-doc-tools
+        run: |
+          python -m pip install --upgrade "pip>=26.1.1"
+          pip install "juniper-doc-tools>=0.1.0,<0.2.0"
+
       - name: Validate Documentation Links
         run: |
           echo "╔════════════════════════════════════════════════════════════╗"
           echo "║       juniper-cascor-worker - Documentation Validation     ║"
           echo "╚════════════════════════════════════════════════════════════╝"
-          python scripts/check_doc_links.py \
+          juniper-check-doc-links \
             --exclude templates \
             --exclude history \
             --exclude legacy \
