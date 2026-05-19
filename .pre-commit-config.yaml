@@ -266,6 +266,16 @@ repos:
         language: system
         files: '^\.env(\.secrets)?$'
         types: [file]
+      - id: require-requirements-lock
+        name: Ensure requirements.lock exists
+        # Guards against accidental deletion. Same incident class as
+        # juniper-data 2026-05-19: Dependabot helper replaced the canonical
+        # lockfile with timestamped backups; a subsequent cleanup PR
+        # deleted those backups, leaving no requirements.lock at all.
+        entry: "bash -c '[ -f requirements.lock ] || { echo ERROR requirements.lock is missing. Regenerate via uv pip compile per workflow. ; exit 1 ; }'"
+        language: system
+        pass_filenames: false
+        always_run: true
 
 # CI configuration (for pre-commit.ci service, if used)
 ci:
