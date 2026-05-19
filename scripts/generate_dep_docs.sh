@@ -24,7 +24,7 @@ set -euo pipefail
 CONF_DIR="conf"
 NOTES_DIR="notes"
 
-TIMESTAMP=$(date +"%Y-%m-%d_%H:%M:%S")
+TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 DATE=$(date +"%Y-%m-%d")
 YEAR=$(date +"%Y")
 CONDA_DATE=$(date +"%Y.%m.%d")
