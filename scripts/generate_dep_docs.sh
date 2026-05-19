@@ -10,7 +10,7 @@
 # Description:
 #    Generates dependency documentation files for CI/CD.
 #    - requirements_ci.txt (pip freeze with header)
-#    - conda_environment_ci.yaml (conda list --explicit with header)
+#    - conda_environment_ci.yaml (conda env export --no-builds with header)
 #    - Preserves existing files with timestamped backups
 #
 # Usage:
@@ -116,8 +116,23 @@ if command -v conda &> /dev/null; then
         echo "" >> "${CONDA_FILE}"
     fi
 
-    # Append conda list --explicit output
-    conda list --explicit >> "${CONDA_FILE}"
+    # Append conda dependencies with proper YAML indentation (two-space prefix).
+    # conda env export --no-builds produces valid YAML; extract only the
+    # dependency lines (between "dependencies:" and the next top-level key)
+    # to merge with our custom header which already contains "dependencies:".
+    conda env export --no-builds \
+        | sed -n '/^dependencies:$/,/^[a-z]/{ /^dependencies:$/d; /^[a-z]/d; p; }' \
+        >> "${CONDA_FILE}"
+
+    # Validate generated YAML syntax
+    if command -v python &> /dev/null; then
+        if python -c "import yaml; yaml.safe_load(open('${CONDA_FILE}'))" 2>/dev/null; then
+            echo "  Validated: ${CONDA_FILE} YAML syntax OK"
+        else
+            echo "  ERROR: Generated ${CONDA_FILE} has invalid YAML syntax"
+            exit 1
+        fi
+    fi
 
     echo "  Generated: ${CONDA_FILE}"
 else
