@@ -120,8 +120,17 @@ if command -v conda &> /dev/null; then
     # conda env export --no-builds produces valid YAML; extract only the
     # dependency lines (between "dependencies:" and the next top-level key)
     # to merge with our custom header which already contains "dependencies:".
+    #
+    # 2026-05-20 fix: switched from the previous `sed -n '/^dependencies:$/,
+    # /^[a-z]/{...}'` pipeline to awk. The sed range terminator was emitted
+    # as a trailing top-level key (`prefix:`, `variables:`) under
+    # conda-incubator/setup-miniconda's auto-activate-base config, breaking
+    # the YAML validation step that runs immediately after this block.
+    # The awk form is end-exclusive: when it sees the next top-level key
+    # (`/^[a-zA-Z]/`), it clears the flag BEFORE printing that line, so the
+    # terminator is reliably omitted.
     conda env export --no-builds \
-        | sed -n '/^dependencies:$/,/^[a-z]/{ /^dependencies:$/d; /^[a-z]/d; p; }' \
+        | awk '/^dependencies:$/{flag=1; next} flag && /^[a-zA-Z]/{flag=0} flag' \
         >> "${CONDA_FILE}"
 
     # Validate generated YAML syntax
