@@ -117,21 +117,24 @@ if command -v conda &> /dev/null; then
     fi
 
     # Append conda dependencies with proper YAML indentation (two-space prefix).
-    # conda env export --no-builds produces valid YAML; extract only the
-    # dependency lines (between "dependencies:" and the next top-level key)
-    # to merge with our custom header which already contains "dependencies:".
-    #
-    # 2026-05-20 fix: switched from the previous `sed -n '/^dependencies:$/,
-    # /^[a-z]/{...}'` pipeline to awk. The sed range terminator was emitted
-    # as a trailing top-level key (`prefix:`, `variables:`) under
-    # conda-incubator/setup-miniconda's auto-activate-base config, breaking
-    # the YAML validation step that runs immediately after this block.
-    # The awk form is end-exclusive: when it sees the next top-level key
-    # (`/^[a-zA-Z]/`), it clears the flag BEFORE printing that line, so the
-    # terminator is reliably omitted.
+    # We parse `conda env export --no-builds` output as YAML in Python, extract
+    # the dependencies list, and re-emit it with consistent indentation. This
+    # is the third iteration of this block:
+    #   1. sed range with inner delete — leaked the range-terminator line
+    #      (e.g. `prefix:`) into the output under setup-miniconda's
+    #      auto-activate-base.
+    #   2. awk end-exclusive (#69) — fixed the leak case but still failed
+    #      validation on the worker CI (cause not yet root-caused — likely
+    #      a subtle interaction with pip-installed nested deps shape).
+    #   3. This version: parse with PyYAML, re-emit. Robust to any output
+    #      shape because we're not pattern-matching the raw text.
     conda env export --no-builds \
-        | awk '/^dependencies:$/{flag=1; next} flag && /^[a-zA-Z]/{flag=0} flag' \
-        >> "${CONDA_FILE}"
+        | python -c "
+import sys, textwrap, yaml
+data = yaml.safe_load(sys.stdin)
+deps = data.get('dependencies', [])
+print(textwrap.indent(yaml.dump(deps, default_flow_style=False), '  ').rstrip())
+" >> "${CONDA_FILE}"
 
     # Validate generated YAML syntax
     if command -v python &> /dev/null; then
