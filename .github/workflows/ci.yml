@@ -116,7 +116,7 @@ jobs:
       - name: Install juniper-doc-tools
         run: |
           python -m pip install --upgrade "pip>=26.1.1"
-          pip install "juniper-doc-tools>=0.1.0,<0.2.0"
+          pip install "juniper-doc-tools>=0.1.0,<0.2.0" "pyyaml>=6.0"
 
       - name: Validate Documentation Links
         run: |
@@ -134,6 +134,19 @@ jobs:
             --exclude development \
             --exclude CHANGELOG.md \
             --cross-repo skip
+
+      # Catches the failure class that broke 3 juniper-X CIs on
+      # 2026-05-18: a workflow that invokes ``python|bash <path>`` after
+      # the path was renamed or moved. The test discovers this repo
+      # root via a ``.github/workflows/`` walk-up (location-agnostic),
+      # so the file at util/test_workflow_script_paths.py can be moved
+      # around freely. Mirror of juniper-ml#267's per-PR lint.
+      - name: Lint .github/workflows/ script paths
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       Workflow script-path lint                            ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          python3 -m unittest -v util/test_workflow_script_paths.py
 
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   # Async-route audit (Phase 4 — enforced).
