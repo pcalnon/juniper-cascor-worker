@@ -1,107 +1,217 @@
-# juniper-cascor-worker
+<div align="right" width="150px" height="150px" align="right" valign="top"> <img src="images/Juniper_Logo_150px.png" alt="Juniper" align="right" valign="top" width="150px" /></div>
+<br /> <br /> <br /> <br />
 
-Remote candidate training worker for the JuniperCascor cascade correlation neural network service.
+# Juniper: Dynamic Neural Network Research Platform
 
-## Overview
+Juniper is an AI/ML research platform for investigating dynamic neural network architectures and novel learning paradigms.  The project emphasizes ground-up implementations from primary literature, enabling a more transparent exploration of fundamental algorithms.
 
-This package enables distributed candidate training on remote hardware.
+## Juniper Cascor Worker
 
-It supports two worker modes:
+`juniper-cascor-worker` is the **distributed candidate-training worker** of the Juniper platform. A worker process connects outbound to a running `juniper-cascor` instance on its `/ws/v1/workers` WebSocket endpoint, receives candidate-unit training tasks from the cascor service, and returns trained candidates so that the cascor service can select the next unit to recruit. The package supports two operating modes — a default WebSocket mode (`CascorWorkerAgent`) and a deprecated legacy mode (`CandidateTrainingWorker` over `multiprocessing.managers`, retained for transitional deployments). The worker is **managed by** `juniper-cascor` rather than imported by it: there is no code-import dependency between the two repositories, only a wire-protocol contract.
 
-- **WebSocket mode (default)**: `CascorWorkerAgent` connects to the
-  `juniper-cascor` `/ws/v1/workers` endpoint and exchanges structured JSON and
-  binary tensor frames.
-- **Legacy mode (`--legacy`)**: `CandidateTrainingWorker` connects to a
-  `CandidateTrainingManager` over `multiprocessing.managers` (deprecated).
+## Distribution
 
-## Ecosystem Compatibility
-
-This package is part of the [Juniper](https://github.com/pcalnon/juniper-ml) ecosystem.
-Compatible with:
-
-| juniper-data | juniper-cascor | juniper-canopy |
-|---|---|---|
-| 0.4.x | 0.3.x | 0.2.x |
-
-## Installation
+`juniper-cascor-worker` is published on PyPI as **[`juniper-cascor-worker`](https://pypi.org/project/juniper-cascor-worker/)**.
+The package is also surfaced through the platform meta-distribution
+**[`juniper-ml`](https://pypi.org/project/juniper-ml/)**, which installs
+the full client stack via `pip install juniper-ml[all]`.
 
 ```bash
 pip install juniper-cascor-worker
 ```
 
-**Note:** This package requires the JuniperCascor source code to be importable
-on the worker machine (the worker runs CasCor's training code locally).
+## Ecosystem Compatibility
 
-## CLI Usage
+This package is part of the [Juniper](https://github.com/pcalnon/juniper-ml) ecosystem.
+Verified compatible versions:
 
-```bash
-# Default mode (WebSocket)
-juniper-cascor-worker \
-    --server-url ws://192.168.1.100:8200/ws/v1/workers \
-    --auth-token my-worker-token
+| juniper-data | juniper-cascor | juniper-canopy | data-client | cascor-client | cascor-worker |
+|--------------|----------------|----------------|-------------|---------------|---------------|
+| 0.6.x        | 0.4.x          | 0.4.x          | >=0.4.1     | >=0.4.0       | >=0.3.0       |
 
-# WebSocket mode with mTLS and custom heartbeat
-juniper-cascor-worker \
-    --server-url wss://cascor.example.com/ws/v1/workers \
-    --auth-token my-worker-token \
-    --heartbeat-interval 15 \
-    --tls-cert /etc/juniper/worker.crt \
-    --tls-key /etc/juniper/worker.key \
-    --tls-ca /etc/juniper/ca.pem
+For full-stack Docker deployment and integration tests, see [`juniper-deploy`](https://github.com/pcalnon/juniper-deploy).
 
-# Legacy mode (deprecated)
-juniper-cascor-worker \
-    --legacy \
-    --manager-host 192.168.1.100 \
-    --manager-port 50000 \
-    --authkey my-secret-key \
-    --workers 4 \
-    --mp-context forkserver \
-    --log-level INFO
+## Architecture
+
+`juniper-cascor-worker` is a long-running client process that connects outbound to `juniper-cascor`'s worker WebSocket. The worker holds the candidate-training computation; the cascor service holds the scheduling, candidate selection, and network-growth logic.
+
+```text
+┌─────────────────────────┐                  ┌──────────────────────┐
+│  juniper-cascor-worker  │ ◄── X-API-Key ──►│   juniper-cascor     │
+│  CascorWorkerAgent      │   over WSS/WS    │   Training Svc       │
+│  (this package)         │ ──────────────►  │   /ws/v1/workers     │
+│                         │   tensor frames  │   Port 8200          │
+└─────────────────────────┘                  └──────────────────────┘
 ```
 
-## Python API
+The worker authenticates with the `X-API-Key` header on connection, exchanges structured JSON control frames plus binary tensor frames for candidate-unit training, and reports task progress through periodic heartbeats. Multiple worker instances may be connected concurrently; `juniper-cascor` distributes candidate-pool training across them.
+
+## Related Services
+
+| Service | Relationship | Notes |
+|---------|-------------|-------|
+| [juniper-cascor](https://github.com/pcalnon/juniper-cascor) | Worker's upstream service; manages candidate-pool scheduling | Default URL `ws://juniper-cascor:8200/ws/v1/workers` |
+| [juniper-deploy](https://github.com/pcalnon/juniper-deploy) | Provides the orchestrated `juniper-cascor-worker` Docker service | See `juniper-deploy/docker-compose.yml` |
+
+## Service Configuration
+
+Environment variables are read by `juniper_cascor_worker/config.py` and grouped by mode. Default mode (WebSocket) reads only the WebSocket variables; `--legacy` mode reads only the legacy variables. The shared variables (logging, health-probe surface) apply to both modes.
+
+### WebSocket mode
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CASCOR_SERVER_URL` | **Yes** | — | Worker endpoint URL (`ws://` or `wss://`) |
+| `CASCOR_AUTH_TOKEN` | No | empty | Token sent as the `X-API-Key` header |
+| `CASCOR_API_KEY` | No | empty | Deprecated alias for `CASCOR_AUTH_TOKEN` |
+| `CASCOR_HEARTBEAT_INTERVAL` | No | `10.0` | Seconds between heartbeat messages |
+| `CASCOR_TASK_TIMEOUT` | No | `3600.0` | Maximum seconds for a single training task |
+| `CASCOR_TLS_CERT` | No | unset | Client certificate path for mTLS |
+| `CASCOR_TLS_KEY` | No | unset | Client private key path for mTLS |
+| `CASCOR_TLS_CA` | No | unset | Custom CA bundle for TLS verification |
+
+### Legacy mode (`--legacy`)
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CASCOR_MANAGER_HOST` | No | `127.0.0.1` | Manager hostname |
+| `CASCOR_MANAGER_PORT` | No | `50000` | Manager port |
+| `CASCOR_AUTHKEY` | **Yes** | — | Manager authentication key |
+| `CASCOR_NUM_WORKERS` | No | `1` | Worker process count |
+| `CASCOR_MP_CONTEXT` | No | `forkserver` | Multiprocessing context (`forkserver`, `spawn`, `fork`) |
+
+### Shared
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CASCOR_WORKER_HEALTH_PORT` | No | `8210` | Health-check HTTP server port (R1.3 health-probe surface) |
+| `CASCOR_WORKER_HEALTH_BIND` | No | `127.0.0.1` | Health-check bind address; set to `0.0.0.0` when running under Kubernetes |
+
+## Docker Deployment
+
+```bash
+# Full stack (recommended) — see juniper-deploy:
+git clone https://github.com/pcalnon/juniper-deploy.git  # (private repository)
+cd juniper-deploy && docker compose up --build
+
+# Standalone:
+docker build -t juniper-cascor-worker:latest .
+docker run --rm \
+  -e CASCOR_SERVER_URL=ws://<cascor-host>:8200/ws/v1/workers \
+  -e CASCOR_AUTH_TOKEN=<worker-token> \
+  juniper-cascor-worker:latest
+```
+
+The Dockerfile defaults to `juniper-cascor-worker --server-url ws://juniper-cascor:8200/ws/v1/workers`, which resolves the cascor service by name on the `juniper-deploy` Docker network. Container liveness is probed by `kill -0 1` (PID-1 liveness) rather than an HTTP endpoint to avoid PyTorch initialization races on the dedicated health-server thread.
+
+## Dependency Lockfile
+
+Two lockfiles ship with this package, both regenerated by the same `uv pip compile` invocations.
+
+| File | Purpose |
+|------|---------|
+| `requirements.lock` | Default lockfile; pins the full GPU-capable dependency surface (includes CUDA-enabled PyTorch wheels) for non-Docker developer installs |
+| `requirements-cpu.lock` | CPU-only lockfile (Phase 4E, CW-02); used by the Dockerfile to keep the runtime image slim by excluding the ~2–4 GB NVIDIA/CUDA transitive stack |
+
+Regenerate the default lock:
+
+```bash
+uv pip compile pyproject.toml --no-emit-package torch -o requirements.lock
+```
+
+Regenerate the CPU-only lock (PyTorch installed separately from the official PyTorch CPU index in the Dockerfile):
+
+```bash
+echo "torch==2.9.1+cpu" > /tmp/torch-cpu-override
+uv pip compile pyproject.toml \
+  --constraint /tmp/torch-cpu-override \
+  --extra-index-url https://download.pytorch.org/whl/cpu \
+  --index-strategy unsafe-best-match \
+  --no-emit-package torch \
+  -o requirements-cpu.lock
+```
+
+The ecosystem-wide lockfile-freshness gate enforces regeneration on every PR that touches `pyproject.toml`; the `/tmp` + `mv` pattern avoids the self-pin trap of `uv pip compile -o <file>` reading the existing file.
+
+## Active Research Components
+
+`juniper-cascor-worker` contributes the **distributed candidate-pool training** research component to the Juniper platform: a wire-protocol-defined parallelisation of Cascade-Correlation's candidate-unit selection step across an arbitrary number of worker hosts, coordinated by `juniper-cascor` over a WebSocket worker protocol (`/ws/v1/workers`) with mTLS support, structured heartbeats, and reassignment of tasks from workers that have exceeded the heartbeat timeout. The protocol itself — defined by `juniper-cascor-protocol` — is the research artifact; this package is its reference implementation on the worker side.
+
+## Quick Start Guide
+
+### Prerequisites
+
+- Python ≥ 3.12
+- A running `juniper-cascor` instance reachable at the URL passed via `--server-url` or `CASCOR_SERVER_URL`
+- A worker auth token issued by `juniper-cascor` (`JUNIPER_CASCOR_API_KEYS`); the same token is passed to the worker via `--auth-token` or `CASCOR_AUTH_TOKEN`
+- The JuniperCascor source code importable on the worker machine — the worker runs CasCor's candidate-training code locally rather than depending on a published CasCor library
+
+### Installation
+
+```bash
+pip install juniper-cascor-worker
+```
+
+### Verification — WebSocket mode
+
+```bash
+juniper-cascor-worker \
+  --server-url ws://<cascor-host>:8200/ws/v1/workers \
+  --auth-token <worker-token>
+```
+
+A successful start logs `Connected to ws://<cascor-host>:8200/ws/v1/workers`. Configurable behaviour through optional flags (heartbeat interval, mTLS, task timeout) is documented under [Service Configuration](#service-configuration). The worker can also be embedded in Python:
 
 ```python
 import asyncio
-
 from juniper_cascor_worker import CascorWorkerAgent, WorkerConfig
 
 config = WorkerConfig(
-    server_url="ws://192.168.1.100:8200/ws/v1/workers",
-    auth_token="my-worker-token",
+    server_url="ws://<cascor-host>:8200/ws/v1/workers",
+    auth_token="<worker-token>",
 )
 
 agent = CascorWorkerAgent(config)
 asyncio.run(agent.run())
 ```
 
-## Environment Variables
+### Verification — Legacy mode
 
-| Variable | Mode | Description | Default |
-|----------|------|-------------|---------|
-| `CASCOR_SERVER_URL` | WebSocket (default) | Worker endpoint URL (`ws://` or `wss://`) | *(required)* |
-| `CASCOR_AUTH_TOKEN` | WebSocket (default) | Token sent as `X-API-Key` header | empty |
-| `CASCOR_HEARTBEAT_INTERVAL` | WebSocket (default) | Seconds between heartbeat messages | `10.0` |
-| `CASCOR_TLS_CERT` | WebSocket (default) | Client certificate path for mTLS | unset |
-| `CASCOR_TLS_KEY` | WebSocket (default) | Client private key path for mTLS | unset |
-| `CASCOR_TLS_CA` | WebSocket (default) | Custom CA bundle for TLS verification | unset |
-| `CASCOR_MANAGER_HOST` | Legacy (`--legacy`) | Manager hostname | `127.0.0.1` |
-| `CASCOR_MANAGER_PORT` | Legacy (`--legacy`) | Manager port | `50000` |
-| `CASCOR_AUTHKEY` | Legacy (`--legacy`) | Manager authentication key | *(required in legacy mode)* |
-| `CASCOR_NUM_WORKERS` | Legacy (`--legacy`) | Worker process count | `1` |
-| `CASCOR_MP_CONTEXT` | Legacy (`--legacy`) | Multiprocessing method | `forkserver` |
+Legacy mode is retained only for transitional deployments and is deprecated. New deployments should use WebSocket mode.
 
-## Juniper Ecosystem
+```bash
+juniper-cascor-worker --legacy \
+  --manager-host <manager-host> \
+  --manager-port 50000 \
+  --authkey <legacy-authkey> \
+  --workers 4
+```
 
-This package is part of the Juniper Cascade Correlation Neural Network Research Platform.
+### Next Steps
 
-| Package | Description | Install |
-|---------|-------------|---------|
-| [juniper-data-client](https://github.com/pcalnon/juniper-data-client) | Dataset service client | `pip install juniper-data-client` |
-| [juniper-cascor-client](https://github.com/pcalnon/juniper-cascor-client) | Neural network service client | `pip install juniper-cascor-client` |
-| [juniper-cascor-worker](https://github.com/pcalnon/juniper-cascor-worker) | Distributed training worker (this package) | `pip install juniper-cascor-worker` |
+- [`docs/QUICK_START.md`](docs/QUICK_START.md) — complete installation and verification guide
+- [`docs/REFERENCE.md`](docs/REFERENCE.md) — full configuration and CLI reference
+- [`docs/DEVELOPER_CHEATSHEET.md`](docs/DEVELOPER_CHEATSHEET.md) — quick-reference card for development tasks
+- [`juniper-cascor`](https://github.com/pcalnon/juniper-cascor) — upstream service the worker connects to
+- [`juniper-deploy`](https://github.com/pcalnon/juniper-deploy) — Docker Compose orchestration for the full-stack platform
+- [`juniper-ml`](https://pypi.org/project/juniper-ml/) — platform meta-package on PyPI
+
+## Research Philosophy
+
+The Juniper platform exists to study learning algorithms whose network architecture is not fixed in advance. Its initial anchor is the Cascade-Correlation algorithm of Fahlman and Lebiere (1990), implemented from the primary literature without recourse to higher-level abstractions that elide the algorithm's operational detail. The organising commitment is that algorithm implementations remain inspectable at the level at which they were originally specified: candidate units, correlation objectives, weight-freezing semantics, and the structural events that grow the network are first-class artifacts of the codebase rather than internal details of a library wrapper. This permits comparative work — across algorithms, datasets, and hyperparameter regimes — to be conducted on a known and reproducible substrate.
+
+The current platform comprises a Cascade-Correlation training service exposing a REST and WebSocket interface, a dataset-generation service with a named-version registry that includes the ARC-AGI families, a real-time monitoring dashboard for inspecting training dynamics as they occur, and a distributed worker that parallelises candidate-unit training across hosts. Near-term work extends the architectural-growth catalogue beyond Cascade-Correlation, introduces multi-network orchestration for comparative experiments at the level of network populations rather than individual runs, and tightens the dataset–training–monitoring loop into a reproducible research workbench. The longer-term direction is the systematic empirical study of constructive and architecture-growing learning algorithms, with first-class infrastructure for the ablation, comparison, and replication that such a study requires.
+
+## Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [`docs/DOCUMENTATION_OVERVIEW.md`](docs/DOCUMENTATION_OVERVIEW.md) | Navigation index for all `juniper-cascor-worker` documentation |
+| [`docs/QUICK_START.md`](docs/QUICK_START.md) | Complete installation and verification guide |
+| [`docs/REFERENCE.md`](docs/REFERENCE.md) | Full configuration, CLI, and environment-variable reference |
+| [`docs/DEVELOPER_CHEATSHEET.md`](docs/DEVELOPER_CHEATSHEET.md) | Quick-reference card for development tasks |
+| [`CHANGELOG.md`](CHANGELOG.md) | Version history |
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License — see [`LICENSE`](LICENSE) for details.
