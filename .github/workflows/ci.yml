@@ -429,6 +429,19 @@ jobs:
           echo "╔════════════════════════════════════════════════════════════╗"
           echo "║       juniper-cascor-worker - Dependency Documentation     ║"
           echo "╚════════════════════════════════════════════════════════════╝"
+          # ──────────────────────────────────────────────────────────────
+          # DO NOT REMOVE: PyYAML is required by scripts/generate_dep_docs.sh
+          # for BOTH dependency extraction (parses conda env export output)
+          # AND YAML-syntax validation (yaml.safe_load on the generated file).
+          # actions/setup-python ships a vanilla Python without pyyaml, and
+          # the script's `python -c "import yaml; ... 2>/dev/null"` validation
+          # swallows the ModuleNotFoundError, surfacing it as a misleading
+          # "invalid YAML syntax" error. Three iterations of pattern-matching
+          # changes (sed → awk → python yaml) chased that ghost before
+          # PR #72 root-caused it. pyproject.toml [test] also declares pyyaml
+          # for belt-and-suspenders.
+          # ──────────────────────────────────────────────────────────────
+          pip install -q pyyaml
           bash scripts/generate_dep_docs.sh
 
       - name: Upload Dependency Documentation
