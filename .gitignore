@@ -17,6 +17,7 @@ cuda/*
 temp/*
 logs/*
 images/*
+!images/Juniper_Logo_150px.png
 # dynet-base/*/
 # dynet-base/*.tgz
 # dynet-base/*.zip
