@@ -416,6 +416,12 @@ jobs:
           echo "╔════════════════════════════════════════════════════════════╗"
           echo "║       juniper-cascor-worker - Dependency Documentation     ║"
           echo "╚════════════════════════════════════════════════════════════╝"
+          # PyYAML is needed by both the dependency-extraction step (parses
+          # conda env export output) and the validation step (checks the
+          # resulting file). actions/setup-python ships a vanilla Python
+          # without pyyaml; install it explicitly here so the script's
+          # `python -c "import yaml; ..."` calls succeed.
+          pip install -q pyyaml
           bash scripts/generate_dep_docs.sh
 
       - name: Upload Dependency Documentation
