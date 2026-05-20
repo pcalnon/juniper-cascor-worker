@@ -233,6 +233,43 @@ repos:
         exclude: ^(CHANGELOG\.md|notes/|docs/)
 
   # ═══════════════════════════════════════════════════════════════════════════
+  # Documentation link validation (juniper-doc-tools)
+  # Wave 3 of the doc-link migration plan; mirrors the per-PR docs CI lane
+  # so devs catch broken markdown links locally before push.
+  # See juniper-ml notes/JUNIPER_DOC_TOOLS_PYPI_MIGRATION_PLAN_2026-05-18.md.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - repo: local
+    hooks:
+      - id: juniper-check-doc-links
+        name: Validate documentation links
+        entry: juniper-check-doc-links
+        language: python
+        additional_dependencies: ["juniper-doc-tools>=0.1.1,<0.2.0"]
+        args:
+          - --exclude
+          - templates
+          - --exclude
+          - history
+          - --exclude
+          - legacy
+          - --exclude
+          - pull_requests
+          - --exclude
+          - releases
+          - --exclude
+          - analysis
+          - --exclude
+          - fixes
+          - --exclude
+          - development
+          - --exclude
+          - CHANGELOG.md
+          - --cross-repo
+          - skip
+        pass_filenames: false
+        files: \.md$
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # Shell Script Linting - shellcheck
   # ═══════════════════════════════════════════════════════════════════════════
   - repo: https://github.com/shellcheck-py/shellcheck-py
