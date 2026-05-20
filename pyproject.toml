@@ -46,6 +46,9 @@ test = [
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
     "pytest-timeout>=2.2.0",
+    # PyYAML used by scripts/generate_dep_docs.sh in CI for both
+    # dependency extraction and YAML-syntax validation.
+    "pyyaml>=6.0",
 ]
 dev = [
     "juniper-cascor-worker[test]",
