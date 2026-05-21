@@ -289,7 +289,7 @@ repos:
     hooks:
       - id: yamllint
         name: Lint YAML files
-        args: [--format, parsable, -d, relaxed]
+        args: [--format, parsable]
         types: [yaml]
 
   # ═══════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,44 @@
+---
+# yamllint configuration for the Juniper ecosystem.
+#
+# Canonical version: aligns all 8 ecosystem repos to a single ruleset
+# (juniper-ml, juniper-data, juniper-cascor, juniper-canopy,
+#  juniper-data-client, juniper-cascor-client, juniper-cascor-worker,
+#  juniper-deploy).
+#
+# Pre-commit no longer passes `-d relaxed` — it loads this file directly
+# so the rules a developer sees in their editor match the rules CI
+# enforces.
+#
+# Rules:
+#   - extends: relaxed (sane base: no truthy/comments strictness; the
+#     codebase has many comments-at-end-of-line and CI `on:` keys that
+#     would trip the strict default preset).
+#   - line-length: max 512 (matches AGENTS.md ecosystem convention for
+#     black/isort/flake8/markdownlint), level: warning (informational,
+#     does not fail pre-commit unless `--strict` is also passed).
+#
+# Ignores cover:
+#   - Local virtual environments and caches.
+#   - Helm chart templates (Go templating, not valid YAML).
+#   - Generated conda environment / pip requirements snapshots
+#     (indentation/structure reflects upstream conda env export output
+#     and would generate false-positive warnings).
+
+extends: relaxed
+
+rules:
+  line-length:
+    max: 512
+    level: warning
+
+ignore: |
+  .venv/
+  venv/
+  __pycache__/
+  .pytest_cache/
+  .mypy_cache/
+  k8s/helm/*/templates/
+  /conda_environment_ci*.yaml
+  /conf/conda_environment_ci*.yaml
+  /conf/requirements_ci*.yaml
