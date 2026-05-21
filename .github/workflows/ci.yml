@@ -137,16 +137,24 @@ jobs:
 
       # Catches the failure class that broke 3 juniper-X CIs on
       # 2026-05-18: a workflow that invokes ``python|bash <path>`` after
-      # the path was renamed or moved. The test discovers this repo
-      # root via a ``.github/workflows/`` walk-up (location-agnostic),
-      # so the file at util/test_workflow_script_paths.py can be moved
-      # around freely. Mirror of juniper-ml#267's per-PR lint.
+      # the path was renamed or moved. Wave 4 of the dep-docs PyPI
+      # migration (juniper-ml notes/JUNIPER_CI_TOOLS_PYPI_MIGRATION_PLAN_2026-05-20.md)
+      # ships this lint as the ``juniper-lint-workflow-paths`` console
+      # script in ``juniper-ci-tools>=0.2.0``; the inline byte-identical
+      # copy at ``util/test_workflow_script_paths.py`` was deleted in
+      # this PR. The shared tool discovers the repo root via a
+      # ``.github/workflows/`` walk-up so it works out-of-the-box.
+      - name: Install juniper-ci-tools (workflow-path lint)
+        run: |
+          python -m pip install --upgrade "pip>=26.1.1"
+          pip install "juniper-ci-tools>=0.2.0,<0.3.0"
+
       - name: Lint .github/workflows/ script paths
         run: |
           echo "╔════════════════════════════════════════════════════════════╗"
           echo "║       Workflow script-path lint                            ║"
           echo "╚════════════════════════════════════════════════════════════╝"
-          python3 -m unittest -v util/test_workflow_script_paths.py
+          juniper-lint-workflow-paths
 
       # Pins AGENTS.md's `**Version**:` header to pyproject.toml's
       # [project].version so version bumps stay in sync with the
@@ -443,7 +451,7 @@ jobs:
         shell: bash -l {0}
         run: |
           python -m pip install --upgrade "pip>=26.1.1"
-          pip install "juniper-ci-tools>=0.1.0,<0.2.0"
+          pip install "juniper-ci-tools>=0.2.0,<0.3.0"
 
       - name: Generate Dependency Documentation
         shell: bash -l {0}
