@@ -1,4 +1,17 @@
 [build-system]
+# CFG-12: ``setuptools>=82.0`` is intentionally tighter than the rest of
+# the Juniper ecosystem (which uses ``>=61.0``). This is a CVE-evasion
+# floor and must NOT be lowered without re-evaluating the underlying
+# advisories:
+#
+#   - CVE-2024-6345 — path-traversal in package_index.py (fixed in 70.0.0)
+#   - CVE-2025-47273 — path-traversal in PackageIndex.download (fixed in 78.1.1)
+#
+# Originally bumped 81.0 -> 82.0 in commit 0ef1f73 ("adding security fix
+# for old and vuln setuptools"). The worker's slim Docker image runs
+# untrusted candidate-training payloads, so it gets the stricter floor;
+# the other Juniper services run in a more controlled trust boundary
+# and have not (yet) been bumped to match — track that work separately.
 requires = ["setuptools>=82.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
