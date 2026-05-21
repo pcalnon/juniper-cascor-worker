@@ -144,10 +144,10 @@ jobs:
       # copy at ``util/test_workflow_script_paths.py`` was deleted in
       # this PR. The shared tool discovers the repo root via a
       # ``.github/workflows/`` walk-up so it works out-of-the-box.
-      - name: Install juniper-ci-tools (workflow-path lint)
+      - name: Install juniper-ci-tools (workflow-path + agents-md lints)
         run: |
           python -m pip install --upgrade "pip>=26.1.1"
-          pip install "juniper-ci-tools>=0.2.0,<0.3.0"
+          pip install "juniper-ci-tools>=0.2.0,<0.4.0"
 
       - name: Lint .github/workflows/ script paths
         run: |
@@ -158,14 +158,17 @@ jobs:
 
       # Pins AGENTS.md's `**Version**:` header to pyproject.toml's
       # [project].version so version bumps stay in sync with the
-      # agent-facing contract. Portable port of juniper-ml's
-      # tests/test_agents_md_version_drift.py (juniper-ml#305).
+      # agent-facing contract. Shipped as the
+      # ``juniper-lint-agents-md-version`` console script in
+      # ``juniper-ci-tools>=0.3.0`` (juniper-ml#310); the inline
+      # byte-identical copy at ``util/test_agents_md_version_drift.py``
+      # was deleted in this PR.
       - name: Lint AGENTS.md version vs pyproject.toml
         run: |
           echo "╔════════════════════════════════════════════════════════════╗"
           echo "║       AGENTS.md version-drift lint                         ║"
           echo "╚════════════════════════════════════════════════════════════╝"
-          python3 -m unittest -v util/test_agents_md_version_drift.py
+          juniper-lint-agents-md-version
 
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   # Async-route audit (Phase 4 — enforced).
@@ -451,7 +454,7 @@ jobs:
         shell: bash -l {0}
         run: |
           python -m pip install --upgrade "pip>=26.1.1"
-          pip install "juniper-ci-tools>=0.2.0,<0.3.0"
+          pip install "juniper-ci-tools>=0.2.0,<0.4.0"
 
       - name: Generate Dependency Documentation
         shell: bash -l {0}
