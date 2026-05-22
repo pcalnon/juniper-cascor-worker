@@ -1,11 +1,12 @@
 # AGENTS.md - Juniper Cascor Worker
 
 **Project**: juniper-cascor-worker — Distributed CasCor Training Worker
-**Version**: 0.3.0
-**License**: MIT License
+**Repository**: pcalnon/juniper-cascor-worker
 **Author**: Paul Calnon
+**License**: MIT License
+**Version**: 0.3.0
 **Python**: >=3.11 (supports 3.11, 3.12, 3.13, 3.14)
-**Last Updated**: 2026-04-02
+**Last Updated**: 2026-05-22
 
 ---
 

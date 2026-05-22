@@ -1,0 +1,98 @@
+# ═══════════════════════════════════════════════════════════════════════
+# AGENTS.md Touch-Up
+#
+# Purpose: keep the **Last Updated**: header in AGENTS.md aligned with
+#          the date the file actually changed, without asking
+#          contributors (or Claude) to remember to bump it.
+#
+# Trigger: pull_request types [opened, reopened, synchronize] with
+#          paths filter on AGENTS.md.
+#
+# Behavior:
+#   1. If the PR's cumulative diff touches AGENTS.md, the workflow
+#      reads the current **Last Updated** value.
+#   2. If it already equals today's UTC date, the job exits no-op.
+#   3. Otherwise the job sed-rewrites the line, commits with
+#      `github-actions[bot]` authorship and a `[skip ci]` tag (so
+#      the bump commit does not re-trigger any workflows), rebases
+#      against any concurrent commits on the PR branch, and pushes
+#      back.
+#
+# Scope: only fires for PRs from the same repository, because the
+#        default GITHUB_TOKEN is read-only for fork-triggered runs.
+#        The Juniper project is solo-authored (@pcalnon) and has no
+#        forks, so this is currently a defensive guard only.
+#
+# Companion lint: tests/test_agents_md_header_schema.py asserts
+#        Last Updated is present + in ISO 8601 date format. The
+#        version-equality check (tests/test_agents_md_version_drift.py)
+#        is a separate concern.
+# ═══════════════════════════════════════════════════════════════════════
+
+name: AGENTS.md Touch-Up
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths:
+      - "AGENTS.md"
+
+concurrency:
+  group: agents-md-touch-up-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  touch-up:
+    name: Bump AGENTS.md Last Updated
+    runs-on: ubuntu-latest
+    # Skip on PRs from forks: the default GITHUB_TOKEN is read-only
+    # for fork-triggered workflow runs, so the push back would fail.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Check out PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump AGENTS.md `**Last Updated**:` to today (UTC)
+        env:
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          today=$(date -u +%Y-%m-%d)
+
+          if ! grep -q '^\*\*Last Updated\*\*:' AGENTS.md; then
+            echo "::warning::AGENTS.md has no '**Last Updated**:' field; skipping auto-bump."
+            exit 0
+          fi
+
+          current=$(grep -E '^\*\*Last Updated\*\*:' AGENTS.md \
+            | head -1 \
+            | sed -E 's/^\*\*Last Updated\*\*:[[:space:]]*//' \
+            | tr -d '[:space:]')
+
+          if [ "$current" = "$today" ]; then
+            echo "Last Updated already $today; nothing to do."
+            exit 0
+          fi
+
+          echo "Bumping AGENTS.md **Last Updated**: $current -> $today"
+          sed -i "s|^\*\*Last Updated\*\*: .*|**Last Updated**: ${today}|" AGENTS.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add AGENTS.md
+          git commit -m "chore(agents-md): bump Last Updated to ${today} [skip ci]"
+
+          # Rebase against any commits that landed concurrently on
+          # the PR branch (rare; defensive). If the rebase fails the
+          # whole job fails loudly rather than force-pushing.
+          git pull --rebase origin "$PR_HEAD_REF"
+          git push origin HEAD:"$PR_HEAD_REF"
