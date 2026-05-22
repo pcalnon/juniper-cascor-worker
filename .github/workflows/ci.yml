@@ -147,7 +147,7 @@ jobs:
       - name: Install juniper-ci-tools (workflow-path + agents-md lints)
         run: |
           python -m pip install --upgrade "pip>=26.1.1"
-          pip install "juniper-ci-tools>=0.2.0,<0.4.0"
+          pip install "juniper-ci-tools>=0.2.0,<0.5.0"
 
       - name: Lint .github/workflows/ script paths
         run: |
@@ -169,6 +169,21 @@ jobs:
           echo "║       AGENTS.md version-drift lint                         ║"
           echo "╚════════════════════════════════════════════════════════════╝"
           juniper-lint-agents-md-version
+
+      # Pins AGENTS.md's header bullet block to the canonical six-field
+      # schema (Project / Repository / Author / License / Version /
+      # Last Updated, in that relative order). Currency of the
+      # `**Last Updated**` field is maintained by the
+      # `.github/workflows/agents-md-touch-up.yml` workflow (auto-bumps
+      # on every PR push). Shipped as the
+      # ``juniper-lint-agents-md-header`` console script in
+      # ``juniper-ci-tools>=0.4.0`` (juniper-ml#319).
+      - name: Lint AGENTS.md header schema
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       AGENTS.md header-schema lint                         ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          juniper-lint-agents-md-header
 
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   # Async-route audit (Phase 4 — enforced).
@@ -454,7 +469,7 @@ jobs:
         shell: bash -l {0}
         run: |
           python -m pip install --upgrade "pip>=26.1.1"
-          pip install "juniper-ci-tools>=0.2.0,<0.4.0"
+          pip install "juniper-ci-tools>=0.2.0,<0.5.0"
 
       - name: Generate Dependency Documentation
         shell: bash -l {0}
