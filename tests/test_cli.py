@@ -382,7 +382,12 @@ class TestCLIWebSocketMode:
     @patch("juniper_cascor_worker.cli.signal.signal")
     @patch("juniper_cascor_worker.cli.argparse.ArgumentParser.parse_args")
     def test_api_key_env_fallback(self, mock_parse_args, mock_signal_fn, mock_asyncio_run):
-        """Falls back to CASCOR_API_KEY when CASCOR_AUTH_TOKEN is unset."""
+        """Falls back to legacy CASCOR_API_KEY when canonical
+        JUNIPER_CASCOR_WORKER_AUTH_TOKEN is unset. CFG-06: this test
+        specifically validates the legacy alias still works;
+        DeprecationWarning is expected and suppressed."""
+        import warnings as _warnings
+
         mock_args = MagicMock()
         mock_args.legacy = False
         mock_args.log_level = "INFO"
@@ -397,7 +402,9 @@ class TestCLIWebSocketMode:
 
         with patch.dict("os.environ", {"CASCOR_API_KEY": "legacy-env-key"}, clear=True):
             with patch("juniper_cascor_worker.config.WorkerConfig.validate"), patch("juniper_cascor_worker.worker.CascorWorkerAgent.__init__", return_value=None) as mock_init:
-                main()
+                with _warnings.catch_warnings():
+                    _warnings.simplefilter("ignore", DeprecationWarning)
+                    main()
 
                 config_arg = mock_init.call_args[0][0]
                 assert config_arg.auth_token == "legacy-env-key"

@@ -3,12 +3,13 @@
 import argparse
 import asyncio
 import logging
-import os
 import signal
 import sys
 import threading
 
-from juniper_cascor_worker.constants import DEFAULT_HEARTBEAT_INTERVAL, DEFAULT_LOG_LEVEL, DEFAULT_MANAGER_HOST, DEFAULT_MANAGER_PORT, DEFAULT_MP_CONTEXT, DEFAULT_NUM_WORKERS, DEFAULT_TASK_TIMEOUT, ENV_API_KEY, ENV_AUTH_TOKEN, ENV_AUTHKEY, ENV_SERVER_URL, ENV_TASK_TIMEOUT, LOG_FORMAT, VALID_LOG_LEVELS, VALID_MP_CONTEXTS
+from juniper_config_tools import env_with_legacy_alias
+
+from juniper_cascor_worker.constants import DEFAULT_HEARTBEAT_INTERVAL, DEFAULT_LOG_LEVEL, DEFAULT_MANAGER_HOST, DEFAULT_MANAGER_PORT, DEFAULT_MP_CONTEXT, DEFAULT_NUM_WORKERS, DEFAULT_TASK_TIMEOUT, ENV_AUTH_TOKEN, ENV_AUTHKEY, ENV_SERVER_URL, ENV_TASK_TIMEOUT, LEGACY_ENV_API_KEY, LEGACY_ENV_AUTH_TOKEN, LEGACY_ENV_AUTHKEY, LEGACY_ENV_SERVER_URL, LEGACY_ENV_TASK_TIMEOUT, LOG_FORMAT, VALID_LOG_LEVELS, VALID_MP_CONTEXTS
 
 
 def main() -> None:
@@ -73,10 +74,13 @@ def _run_websocket(args: argparse.Namespace) -> None:
     from juniper_cascor_worker.config import WorkerConfig
     from juniper_cascor_worker.worker import CascorWorkerAgent
 
-    server_url = args.server_url or os.environ.get(ENV_SERVER_URL, "")
-    auth_token = args.auth_token or os.environ.get(ENV_AUTH_TOKEN) or os.environ.get(ENV_API_KEY, "")
+    # CFG-06: route every env read through env_with_legacy_alias so legacy
+    # ``CASCOR_*`` names emit a DeprecationWarning naming both old + new
+    # vars. ENV_AUTH_TOKEN has two legacy aliases (chain via ``or``).
+    server_url = args.server_url or env_with_legacy_alias(ENV_SERVER_URL, LEGACY_ENV_SERVER_URL, "")
+    auth_token = args.auth_token or env_with_legacy_alias(ENV_AUTH_TOKEN, LEGACY_ENV_AUTH_TOKEN) or env_with_legacy_alias(ENV_AUTH_TOKEN, LEGACY_ENV_API_KEY, "")
 
-    task_timeout = args.task_timeout if args.task_timeout != DEFAULT_TASK_TIMEOUT else float(os.environ.get(ENV_TASK_TIMEOUT, str(DEFAULT_TASK_TIMEOUT)))
+    task_timeout = args.task_timeout if args.task_timeout != DEFAULT_TASK_TIMEOUT else float(env_with_legacy_alias(ENV_TASK_TIMEOUT, LEGACY_ENV_TASK_TIMEOUT, str(DEFAULT_TASK_TIMEOUT)))
 
     config = WorkerConfig(
         server_url=server_url,
@@ -119,7 +123,7 @@ def _run_legacy(args: argparse.Namespace) -> None:
     from juniper_cascor_worker.config import WorkerConfig
     from juniper_cascor_worker.worker import CandidateTrainingWorker
 
-    authkey = args.authkey or os.environ.get(ENV_AUTHKEY, "")
+    authkey = args.authkey or env_with_legacy_alias(ENV_AUTHKEY, LEGACY_ENV_AUTHKEY, "")
 
     config = WorkerConfig(
         manager_host=args.manager_host,

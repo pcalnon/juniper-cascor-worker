@@ -17,7 +17,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "juniper-cascor-worker"
-version = "0.3.0"
+version = "0.4.0"
 description = "Remote candidate training worker for the JuniperCascor neural network service"
 readme = "README.md"
 license = "MIT"
@@ -51,6 +51,13 @@ dependencies = [
     # never loaded by the worker process; verified by
     # tests/test_no_pydantic_at_runtime.py.
     "juniper-cascor-protocol>=0.1.0",
+    # CFG-06 (juniper-cascor-worker 0.4.0): shared env-var alias-with-
+    # deprecation helper. juniper-config-tools is stdlib-only (deps = []),
+    # so adopting it does NOT pull pydantic and does NOT regress the
+    # ``tests/test_no_pydantic_at_runtime.py`` invariant (R2 exit-gate
+    # decision juniper-ml#168). Pinned <0.2.0 to opt out of future API
+    # growth that may add unrelated helpers.
+    "juniper-config-tools>=0.1.0,<0.2.0",
 ]
 
 [project.optional-dependencies]

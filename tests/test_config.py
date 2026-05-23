@@ -85,8 +85,9 @@ class TestWorkerConfig:
             config.validate(legacy=False)
 
     def test_from_env_health_overrides(self):
-        """METRICS-MON R1.3 / seed-04: env vars override health server defaults."""
-        env = {"CASCOR_WORKER_HEALTH_PORT": "9999", "CASCOR_WORKER_HEALTH_BIND": "0.0.0.0"}
+        """METRICS-MON R1.3 / seed-04: env vars override health server defaults.
+        CFG-06: env-var names migrated CASCOR_WORKER_* -> JUNIPER_CASCOR_WORKER_*."""
+        env = {"JUNIPER_CASCOR_WORKER_HEALTH_PORT": "9999", "JUNIPER_CASCOR_WORKER_HEALTH_BIND": "0.0.0.0"}
         with patch.dict(os.environ, env, clear=True):
             config = WorkerConfig.from_env()
             assert config.health_port == 9999
@@ -99,12 +100,13 @@ class TestWorkerConfig:
             assert config.manager_port == 50000
 
     def test_from_env_custom(self):
+        """CFG-06: env-var names migrated CASCOR_* -> JUNIPER_CASCOR_WORKER_*."""
         env = {
-            "CASCOR_MANAGER_HOST": "10.0.0.5",
-            "CASCOR_MANAGER_PORT": "9999",
-            "CASCOR_AUTHKEY": "mykey",
-            "CASCOR_NUM_WORKERS": "8",
-            "CASCOR_MP_CONTEXT": "spawn",
+            "JUNIPER_CASCOR_WORKER_MANAGER_HOST": "10.0.0.5",
+            "JUNIPER_CASCOR_WORKER_MANAGER_PORT": "9999",
+            "JUNIPER_CASCOR_WORKER_AUTHKEY": "mykey",
+            "JUNIPER_CASCOR_WORKER_NUM_WORKERS": "8",
+            "JUNIPER_CASCOR_WORKER_MP_CONTEXT": "spawn",
         }
         with patch.dict(os.environ, env, clear=True):
             config = WorkerConfig.from_env()
@@ -183,14 +185,15 @@ class TestWorkerConfigWebSocket:
             config.validate(legacy=True)
 
     def test_from_env_ws_fields(self):
-        """from_env reads CASCOR_SERVER_URL, CASCOR_AUTH_TOKEN, etc."""
+        """from_env reads JUNIPER_CASCOR_WORKER_* canonical names.
+        CFG-06: env-var names migrated CASCOR_* -> JUNIPER_CASCOR_WORKER_*."""
         env = {
-            "CASCOR_SERVER_URL": "ws://remote:8200/ws/v1/workers",
-            "CASCOR_AUTH_TOKEN": "env-api-key",
-            "CASCOR_HEARTBEAT_INTERVAL": "30.0",
-            "CASCOR_TLS_CERT": "/path/to/cert.pem",
-            "CASCOR_TLS_KEY": "/path/to/key.pem",
-            "CASCOR_TLS_CA": "/path/to/ca.pem",
+            "JUNIPER_CASCOR_WORKER_SERVER_URL": "ws://remote:8200/ws/v1/workers",
+            "JUNIPER_CASCOR_WORKER_AUTH_TOKEN": "env-api-key",
+            "JUNIPER_CASCOR_WORKER_HEARTBEAT_INTERVAL": "30.0",
+            "JUNIPER_CASCOR_WORKER_TLS_CERT": "/path/to/cert.pem",
+            "JUNIPER_CASCOR_WORKER_TLS_KEY": "/path/to/key.pem",
+            "JUNIPER_CASCOR_WORKER_TLS_CA": "/path/to/ca.pem",
         }
         with patch.dict(os.environ, env, clear=True):
             config = WorkerConfig.from_env()
@@ -202,20 +205,28 @@ class TestWorkerConfigWebSocket:
             assert config.tls_ca == "/path/to/ca.pem"
 
     def test_from_env_ws_fields_legacy_api_key_fallback(self):
-        """from_env falls back to CASCOR_API_KEY when new var is unset."""
+        """from_env falls back to legacy CASCOR_API_KEY when canonical is unset.
+        CFG-06: this test specifically validates the legacy alias still
+        works; warning is expected and suppressed."""
+        import warnings as _warnings
+
         env = {
-            "CASCOR_SERVER_URL": "ws://remote:8200/ws/v1/workers",
+            "JUNIPER_CASCOR_WORKER_SERVER_URL": "ws://remote:8200/ws/v1/workers",
             "CASCOR_API_KEY": "legacy-env-key",
         }
         with patch.dict(os.environ, env, clear=True):
-            config = WorkerConfig.from_env()
+            with _warnings.catch_warnings():
+                _warnings.simplefilter("ignore", DeprecationWarning)
+                config = WorkerConfig.from_env()
             assert config.auth_token == "legacy-env-key"
 
     def test_from_env_ws_fields_prefers_new_token_name(self):
-        """CASCOR_AUTH_TOKEN takes precedence over deprecated alias."""
+        """JUNIPER_CASCOR_WORKER_AUTH_TOKEN takes precedence over legacy
+        CASCOR_API_KEY alias. CFG-06: canonical-wins-over-legacy is a
+        property of env_with_legacy_alias; no warning fires."""
         env = {
-            "CASCOR_SERVER_URL": "ws://remote:8200/ws/v1/workers",
-            "CASCOR_AUTH_TOKEN": "new-token",
+            "JUNIPER_CASCOR_WORKER_SERVER_URL": "ws://remote:8200/ws/v1/workers",
+            "JUNIPER_CASCOR_WORKER_AUTH_TOKEN": "new-token",
             "CASCOR_API_KEY": "legacy-env-key",
         }
         with patch.dict(os.environ, env, clear=True):
@@ -246,10 +257,11 @@ class TestWorkerConfigWebSocket:
             config.validate(legacy=False)
 
     def test_from_env_task_timeout(self):
-        """from_env reads CASCOR_TASK_TIMEOUT."""
+        """from_env reads JUNIPER_CASCOR_WORKER_TASK_TIMEOUT.
+        CFG-06: env-var names migrated CASCOR_* -> JUNIPER_CASCOR_WORKER_*."""
         env = {
-            "CASCOR_SERVER_URL": "ws://remote:8200/ws/v1/workers",
-            "CASCOR_TASK_TIMEOUT": "1800.0",
+            "JUNIPER_CASCOR_WORKER_SERVER_URL": "ws://remote:8200/ws/v1/workers",
+            "JUNIPER_CASCOR_WORKER_TASK_TIMEOUT": "1800.0",
         }
         with patch.dict(os.environ, env, clear=True):
             config = WorkerConfig.from_env()
