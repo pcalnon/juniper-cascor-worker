@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Lockfile**: `requirements-cpu.lock` regenerated to include `juniper-config-tools==0.1.0`. PR [#88](https://github.com/pcalnon/juniper-cascor-worker/pull/88) patched the same CFG-06 fallout in `requirements.lock` but missed the CPU-only sibling, leaving the CI `Check requirements-cpu.lock contains every pyproject dep` step annotating every PR. Transitive pins refreshed alongside: `filelock` 3.25.2 → 3.29.0, `fsspec` 2026.2.0 → 2026.4.0, `numpy` 2.4.3 → 2.4.4. The CPU-only Docker container build now resolves all worker runtime deps from a single lockfile.
+
 ## [0.4.0] - 2026-05-23
 
 ### Changed
