@@ -143,26 +143,55 @@ VALID_LOG_LEVELS: Final[tuple[str, ...]] = ("DEBUG", "INFO", "WARNING", "ERROR")
 LOG_FORMAT: Final[str] = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
 # ---------------------------------------------------------------------------
-# Environment Variable Names
+# Environment Variable Names — CFG-06 (juniper-ml v7 §20)
 # ---------------------------------------------------------------------------
-# Eliminates string duplication between config.py and cli.py for the env vars
-# that the worker reads.
+# Single source of truth for env-var names. As of CFG-06 (juniper-cascor-
+# worker 0.4.0) every env var has a canonical ``JUNIPER_CASCOR_WORKER_*``
+# name and a legacy ``CASCOR_*`` (or ``CASCOR_WORKER_*``) alias. Reads must
+# go through :func:`juniper_config_tools.env_with_legacy_alias` (production
+# path) or the local ``_resolve`` adapter in :mod:`config` (test-injection
+# path) so the deprecation warning fires consistently. ``cli.py`` follows
+# the same rule. The 15 canonical/legacy pairs below are the canonical
+# table; consumers reference both by symbol — never by string literal.
 
-ENV_SERVER_URL: Final[str] = "CASCOR_SERVER_URL"
-ENV_AUTH_TOKEN: Final[str] = "CASCOR_AUTH_TOKEN"  # nosec B105 — env var name, not a token value
-ENV_API_KEY: Final[str] = "CASCOR_API_KEY"  # nosec B105 — env var name, not a key value
-ENV_HEARTBEAT_INTERVAL: Final[str] = "CASCOR_HEARTBEAT_INTERVAL"
-ENV_HEALTH_PORT: Final[str] = "CASCOR_WORKER_HEALTH_PORT"
-ENV_HEALTH_BIND: Final[str] = "CASCOR_WORKER_HEALTH_BIND"
-ENV_TASK_TIMEOUT: Final[str] = "CASCOR_TASK_TIMEOUT"
-ENV_TLS_CERT: Final[str] = "CASCOR_TLS_CERT"
-ENV_TLS_KEY: Final[str] = "CASCOR_TLS_KEY"
-ENV_TLS_CA: Final[str] = "CASCOR_TLS_CA"
-ENV_MANAGER_HOST: Final[str] = "CASCOR_MANAGER_HOST"
-ENV_MANAGER_PORT: Final[str] = "CASCOR_MANAGER_PORT"
-ENV_AUTHKEY: Final[str] = "CASCOR_AUTHKEY"  # nosec B105 — env var name, not an auth key value
-ENV_NUM_WORKERS: Final[str] = "CASCOR_NUM_WORKERS"
-ENV_MP_CONTEXT: Final[str] = "CASCOR_MP_CONTEXT"
+# Canonical (new) — JUNIPER_CASCOR_WORKER_* prefix, ecosystem convention.
+ENV_SERVER_URL: Final[str] = "JUNIPER_CASCOR_WORKER_SERVER_URL"
+ENV_AUTH_TOKEN: Final[str] = "JUNIPER_CASCOR_WORKER_AUTH_TOKEN"  # nosec B105 — env var name
+ENV_HEARTBEAT_INTERVAL: Final[str] = "JUNIPER_CASCOR_WORKER_HEARTBEAT_INTERVAL"
+ENV_HEALTH_PORT: Final[str] = "JUNIPER_CASCOR_WORKER_HEALTH_PORT"
+ENV_HEALTH_BIND: Final[str] = "JUNIPER_CASCOR_WORKER_HEALTH_BIND"
+ENV_TASK_TIMEOUT: Final[str] = "JUNIPER_CASCOR_WORKER_TASK_TIMEOUT"
+ENV_TLS_CERT: Final[str] = "JUNIPER_CASCOR_WORKER_TLS_CERT"
+ENV_TLS_KEY: Final[str] = "JUNIPER_CASCOR_WORKER_TLS_KEY"
+ENV_TLS_CA: Final[str] = "JUNIPER_CASCOR_WORKER_TLS_CA"
+ENV_MANAGER_HOST: Final[str] = "JUNIPER_CASCOR_WORKER_MANAGER_HOST"
+ENV_MANAGER_PORT: Final[str] = "JUNIPER_CASCOR_WORKER_MANAGER_PORT"
+ENV_AUTHKEY: Final[str] = "JUNIPER_CASCOR_WORKER_AUTHKEY"  # nosec B105 — env var name
+ENV_NUM_WORKERS: Final[str] = "JUNIPER_CASCOR_WORKER_NUM_WORKERS"
+ENV_MP_CONTEXT: Final[str] = "JUNIPER_CASCOR_WORKER_MP_CONTEXT"
+
+# Legacy aliases — bare ``CASCOR_*`` (predating the ecosystem convention)
+# and partial-scope ``CASCOR_WORKER_*`` for the two HEALTH_* vars added
+# later under METRICS-MON R1.3 / seed-04. Setting any LEGACY_ENV_* var
+# emits a :class:`DeprecationWarning` naming both old and canonical names.
+# AUTH_TOKEN has TWO legacy aliases (``CASCOR_AUTH_TOKEN`` +
+# ``CASCOR_API_KEY``) — preserves the dual-legacy fallback from
+# pre-CFG-06 config.py / cli.py.
+LEGACY_ENV_SERVER_URL: Final[str] = "CASCOR_SERVER_URL"
+LEGACY_ENV_AUTH_TOKEN: Final[str] = "CASCOR_AUTH_TOKEN"  # nosec B105 — env var name
+LEGACY_ENV_API_KEY: Final[str] = "CASCOR_API_KEY"  # nosec B105 — second legacy alias for ENV_AUTH_TOKEN
+LEGACY_ENV_HEARTBEAT_INTERVAL: Final[str] = "CASCOR_HEARTBEAT_INTERVAL"
+LEGACY_ENV_HEALTH_PORT: Final[str] = "CASCOR_WORKER_HEALTH_PORT"
+LEGACY_ENV_HEALTH_BIND: Final[str] = "CASCOR_WORKER_HEALTH_BIND"
+LEGACY_ENV_TASK_TIMEOUT: Final[str] = "CASCOR_TASK_TIMEOUT"
+LEGACY_ENV_TLS_CERT: Final[str] = "CASCOR_TLS_CERT"
+LEGACY_ENV_TLS_KEY: Final[str] = "CASCOR_TLS_KEY"
+LEGACY_ENV_TLS_CA: Final[str] = "CASCOR_TLS_CA"
+LEGACY_ENV_MANAGER_HOST: Final[str] = "CASCOR_MANAGER_HOST"
+LEGACY_ENV_MANAGER_PORT: Final[str] = "CASCOR_MANAGER_PORT"
+LEGACY_ENV_AUTHKEY: Final[str] = "CASCOR_AUTHKEY"  # nosec B105 — env var name
+LEGACY_ENV_NUM_WORKERS: Final[str] = "CASCOR_NUM_WORKERS"
+LEGACY_ENV_MP_CONTEXT: Final[str] = "CASCOR_MP_CONTEXT"
 
 # ---------------------------------------------------------------------------
 # Validation Bounds

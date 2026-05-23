@@ -1,7 +1,10 @@
 """Configuration for the remote candidate training worker."""
 
-import os
+import warnings
 from dataclasses import dataclass
+from typing import Mapping
+
+from juniper_config_tools import env_with_legacy_alias
 
 from juniper_cascor_worker.constants import (
     DEFAULT_HEALTH_BIND,
@@ -16,7 +19,6 @@ from juniper_cascor_worker.constants import (
     DEFAULT_STOP_TIMEOUT,
     DEFAULT_TASK_QUEUE_TIMEOUT,
     DEFAULT_TASK_TIMEOUT,
-    ENV_API_KEY,
     ENV_AUTH_TOKEN,
     ENV_AUTHKEY,
     ENV_HEALTH_BIND,
@@ -31,6 +33,21 @@ from juniper_cascor_worker.constants import (
     ENV_TLS_CA,
     ENV_TLS_CERT,
     ENV_TLS_KEY,
+    LEGACY_ENV_API_KEY,
+    LEGACY_ENV_AUTH_TOKEN,
+    LEGACY_ENV_AUTHKEY,
+    LEGACY_ENV_HEALTH_BIND,
+    LEGACY_ENV_HEALTH_PORT,
+    LEGACY_ENV_HEARTBEAT_INTERVAL,
+    LEGACY_ENV_MANAGER_HOST,
+    LEGACY_ENV_MANAGER_PORT,
+    LEGACY_ENV_MP_CONTEXT,
+    LEGACY_ENV_NUM_WORKERS,
+    LEGACY_ENV_SERVER_URL,
+    LEGACY_ENV_TASK_TIMEOUT,
+    LEGACY_ENV_TLS_CA,
+    LEGACY_ENV_TLS_CERT,
+    LEGACY_ENV_TLS_KEY,
     MAX_PORT,
     MIN_NUM_WORKERS,
     MIN_PORT,
@@ -38,6 +55,46 @@ from juniper_cascor_worker.constants import (
     VALID_WS_SCHEMES,
 )
 from juniper_cascor_worker.exceptions import WorkerConfigError
+
+
+def _resolve(
+    env: Mapping[str, str] | None,
+    new_name: str,
+    legacy_name: str | None,
+    default: str | None = None,
+) -> str | None:
+    """Resolve an env var via canonical/legacy/default chain.
+
+    Production path (``env is None``) delegates to
+    :func:`juniper_config_tools.env_with_legacy_alias`, which reads
+    :data:`os.environ`. Test-injection path (``env`` provided) uses an
+    inline mapping-aware resolver that mirrors the helper's semantics
+    (same warning text, same ``stacklevel=2``, same once-per-location
+    behaviour). Both paths emit one :class:`DeprecationWarning` when
+    only the legacy name is set.
+
+    The duplication is deliberate: the shared
+    :mod:`juniper_config_tools` 0.1.0 helper reads :data:`os.environ`
+    directly and a future 0.2.0 will likely add an ``env`` kwarg —
+    when that happens, this adapter can collapse to a single
+    delegation. Until then the local copy avoids forcing every
+    cascor-worker consumer onto a moving juniper-config-tools floor.
+    """
+    if env is None:
+        return env_with_legacy_alias(new_name, legacy_name, default)
+    val = env.get(new_name)
+    if val is not None:
+        return val
+    if legacy_name is not None:
+        legacy_val = env.get(legacy_name)
+        if legacy_val is not None:
+            warnings.warn(
+                f"{legacy_name} is deprecated; use {new_name} instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            return legacy_val
+    return default
 
 
 @dataclass
@@ -96,41 +153,63 @@ class WorkerConfig:
     mp_context: str = DEFAULT_MP_CONTEXT
 
     @classmethod
-    def from_env(cls) -> "WorkerConfig":
+    def from_env(cls, env: Mapping[str, str] | None = None) -> "WorkerConfig":
         """Create config from environment variables.
 
-        Environment variables (WebSocket mode):
-            CASCOR_SERVER_URL: WebSocket URL
-            CASCOR_AUTH_TOKEN: API key for authentication
-            CASCOR_API_KEY: Deprecated alias for CASCOR_AUTH_TOKEN
-            CASCOR_HEARTBEAT_INTERVAL: Heartbeat interval in seconds
-            CASCOR_TASK_TIMEOUT: Maximum seconds for a single training task
-            CASCOR_TLS_CERT: Client certificate path
-            CASCOR_TLS_KEY: Client key path
-            CASCOR_TLS_CA: CA certificate path
+        Args:
+            env: Optional explicit env Mapping (typically used by tests).
+                When ``None`` (the default), reads from :data:`os.environ`
+                via :func:`juniper_config_tools.env_with_legacy_alias`.
+                When provided, reads from the mapping via the local
+                :func:`_resolve` adapter. Both paths emit a single
+                :class:`DeprecationWarning` per legacy var consulted.
 
-        Environment variables (Legacy mode):
-            CASCOR_MANAGER_HOST: Manager hostname (default: 127.0.0.1)
-            CASCOR_MANAGER_PORT: Manager port (default: 50000)
-            CASCOR_AUTHKEY: Authentication key (required for legacy mode)
-            CASCOR_NUM_WORKERS: Number of workers (default: 1)
-            CASCOR_MP_CONTEXT: Multiprocessing context (default: forkserver)
+        Canonical env vars (WebSocket mode):
+            JUNIPER_CASCOR_WORKER_SERVER_URL: WebSocket URL
+            JUNIPER_CASCOR_WORKER_AUTH_TOKEN: API key for authentication
+            JUNIPER_CASCOR_WORKER_HEARTBEAT_INTERVAL: Heartbeat interval (s)
+            JUNIPER_CASCOR_WORKER_TASK_TIMEOUT: Per-task timeout (s)
+            JUNIPER_CASCOR_WORKER_TLS_CERT: Client certificate path
+            JUNIPER_CASCOR_WORKER_TLS_KEY: Client key path
+            JUNIPER_CASCOR_WORKER_TLS_CA: CA certificate path
+            JUNIPER_CASCOR_WORKER_HEALTH_PORT: Health probe port
+            JUNIPER_CASCOR_WORKER_HEALTH_BIND: Health probe bind address
+
+        Canonical env vars (Legacy mode):
+            JUNIPER_CASCOR_WORKER_MANAGER_HOST: Manager hostname
+            JUNIPER_CASCOR_WORKER_MANAGER_PORT: Manager port
+            JUNIPER_CASCOR_WORKER_AUTHKEY: Authentication key (required)
+            JUNIPER_CASCOR_WORKER_NUM_WORKERS: Number of workers
+            JUNIPER_CASCOR_WORKER_MP_CONTEXT: Multiprocessing context
+
+        Legacy ``CASCOR_*`` and ``CASCOR_WORKER_*`` env vars from
+        pre-CFG-06 deployments still work; each emits one
+        :class:`DeprecationWarning` per process. ``JUNIPER_CASCOR_WORKER_
+        AUTH_TOKEN`` has two legacy aliases (``CASCOR_AUTH_TOKEN`` and
+        ``CASCOR_API_KEY``) — the dual-fallback chain from pre-CFG-06
+        is preserved.
         """
+        # ENV_AUTH_TOKEN has TWO legacy aliases; chain canonical-only
+        # first, then each legacy in turn. Python ``or`` short-circuits
+        # on truthy values; the second + third calls re-check the
+        # (cheap) canonical lookup, so only the legacy each is targeting
+        # ends up emitting at most one warning.
+        auth_token = _resolve(env, ENV_AUTH_TOKEN, None) or _resolve(env, ENV_AUTH_TOKEN, LEGACY_ENV_AUTH_TOKEN) or _resolve(env, ENV_AUTH_TOKEN, LEGACY_ENV_API_KEY, "")
         return cls(
-            server_url=os.getenv(ENV_SERVER_URL, ""),
-            auth_token=os.getenv(ENV_AUTH_TOKEN) or os.getenv(ENV_API_KEY, ""),
-            heartbeat_interval=float(os.getenv(ENV_HEARTBEAT_INTERVAL, str(DEFAULT_HEARTBEAT_INTERVAL))),
-            task_timeout=float(os.getenv(ENV_TASK_TIMEOUT, str(DEFAULT_TASK_TIMEOUT))),
-            tls_cert=os.getenv(ENV_TLS_CERT),
-            tls_key=os.getenv(ENV_TLS_KEY),
-            tls_ca=os.getenv(ENV_TLS_CA),
-            health_port=int(os.getenv(ENV_HEALTH_PORT, str(DEFAULT_HEALTH_PORT))),
-            health_bind=os.getenv(ENV_HEALTH_BIND, DEFAULT_HEALTH_BIND),
-            manager_host=os.getenv(ENV_MANAGER_HOST, DEFAULT_MANAGER_HOST),
-            manager_port=int(os.getenv(ENV_MANAGER_PORT, str(DEFAULT_MANAGER_PORT))),
-            authkey=os.getenv(ENV_AUTHKEY, ""),
-            num_workers=int(os.getenv(ENV_NUM_WORKERS, str(DEFAULT_NUM_WORKERS))),
-            mp_context=os.getenv(ENV_MP_CONTEXT, DEFAULT_MP_CONTEXT),
+            server_url=_resolve(env, ENV_SERVER_URL, LEGACY_ENV_SERVER_URL, ""),
+            auth_token=auth_token,
+            heartbeat_interval=float(_resolve(env, ENV_HEARTBEAT_INTERVAL, LEGACY_ENV_HEARTBEAT_INTERVAL, str(DEFAULT_HEARTBEAT_INTERVAL))),
+            task_timeout=float(_resolve(env, ENV_TASK_TIMEOUT, LEGACY_ENV_TASK_TIMEOUT, str(DEFAULT_TASK_TIMEOUT))),
+            tls_cert=_resolve(env, ENV_TLS_CERT, LEGACY_ENV_TLS_CERT),
+            tls_key=_resolve(env, ENV_TLS_KEY, LEGACY_ENV_TLS_KEY),
+            tls_ca=_resolve(env, ENV_TLS_CA, LEGACY_ENV_TLS_CA),
+            health_port=int(_resolve(env, ENV_HEALTH_PORT, LEGACY_ENV_HEALTH_PORT, str(DEFAULT_HEALTH_PORT))),
+            health_bind=_resolve(env, ENV_HEALTH_BIND, LEGACY_ENV_HEALTH_BIND, DEFAULT_HEALTH_BIND),
+            manager_host=_resolve(env, ENV_MANAGER_HOST, LEGACY_ENV_MANAGER_HOST, DEFAULT_MANAGER_HOST),
+            manager_port=int(_resolve(env, ENV_MANAGER_PORT, LEGACY_ENV_MANAGER_PORT, str(DEFAULT_MANAGER_PORT))),
+            authkey=_resolve(env, ENV_AUTHKEY, LEGACY_ENV_AUTHKEY, ""),
+            num_workers=int(_resolve(env, ENV_NUM_WORKERS, LEGACY_ENV_NUM_WORKERS, str(DEFAULT_NUM_WORKERS))),
+            mp_context=_resolve(env, ENV_MP_CONTEXT, LEGACY_ENV_MP_CONTEXT, DEFAULT_MP_CONTEXT),
         )
 
     def validate(self, legacy: bool = False) -> None:
