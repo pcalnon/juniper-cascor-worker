@@ -66,28 +66,29 @@ The worker authenticates with the `X-API-Key` header on connection, exchanges st
 
 Environment variables are read by `juniper_cascor_worker/config.py` and grouped by mode. Default mode (WebSocket) reads only the WebSocket variables; `--legacy` mode reads only the legacy variables. The shared variables (logging, health-probe surface) apply to both modes.
 
+> **CFG-06 (>= 0.4.0)**: canonical env-var names are `JUNIPER_CASCOR_WORKER_*`. Legacy `CASCOR_*` (and `CASCOR_WORKER_*`) names still work but emit a `DeprecationWarning` per process. The full legacy → canonical mapping lives in [`AGENTS.md` § Legacy env-var names](./AGENTS.md#legacy-env-var-names).
+
 ### WebSocket mode
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `CASCOR_SERVER_URL` | **Yes** | — | Worker endpoint URL (`ws://` or `wss://`) |
-| `CASCOR_AUTH_TOKEN` | No | empty | Token sent as the `X-API-Key` header |
-| `CASCOR_API_KEY` | No | empty | Deprecated alias for `CASCOR_AUTH_TOKEN` |
-| `CASCOR_HEARTBEAT_INTERVAL` | No | `10.0` | Seconds between heartbeat messages |
-| `CASCOR_TASK_TIMEOUT` | No | `3600.0` | Maximum seconds for a single training task |
-| `CASCOR_TLS_CERT` | No | unset | Client certificate path for mTLS |
-| `CASCOR_TLS_KEY` | No | unset | Client private key path for mTLS |
-| `CASCOR_TLS_CA` | No | unset | Custom CA bundle for TLS verification |
+| `JUNIPER_CASCOR_WORKER_SERVER_URL` | **Yes** | — | Worker endpoint URL (`ws://` or `wss://`) |
+| `JUNIPER_CASCOR_WORKER_AUTH_TOKEN` | No | empty | Token sent as the `X-API-Key` header |
+| `JUNIPER_CASCOR_WORKER_HEARTBEAT_INTERVAL` | No | `10.0` | Seconds between heartbeat messages |
+| `JUNIPER_CASCOR_WORKER_TASK_TIMEOUT` | No | `3600.0` | Maximum seconds for a single training task |
+| `JUNIPER_CASCOR_WORKER_TLS_CERT` | No | unset | Client certificate path for mTLS |
+| `JUNIPER_CASCOR_WORKER_TLS_KEY` | No | unset | Client private key path for mTLS |
+| `JUNIPER_CASCOR_WORKER_TLS_CA` | No | unset | Custom CA bundle for TLS verification |
 
 ### Legacy mode (`--legacy`)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `CASCOR_MANAGER_HOST` | No | `127.0.0.1` | Manager hostname |
-| `CASCOR_MANAGER_PORT` | No | `50000` | Manager port |
-| `CASCOR_AUTHKEY` | **Yes** | — | Manager authentication key |
-| `CASCOR_NUM_WORKERS` | No | `1` | Worker process count |
-| `CASCOR_MP_CONTEXT` | No | `forkserver` | Multiprocessing context (`forkserver`, `spawn`, `fork`) |
+| `JUNIPER_CASCOR_WORKER_MANAGER_HOST` | No | `127.0.0.1` | Manager hostname |
+| `JUNIPER_CASCOR_WORKER_MANAGER_PORT` | No | `50000` | Manager port |
+| `JUNIPER_CASCOR_WORKER_AUTHKEY` | **Yes** | — | Manager authentication key |
+| `JUNIPER_CASCOR_WORKER_NUM_WORKERS` | No | `1` | Worker process count |
+| `JUNIPER_CASCOR_WORKER_MP_CONTEXT` | No | `forkserver` | Multiprocessing context (`forkserver`, `spawn`, `fork`) |
 
 ### Shared
 

@@ -79,7 +79,6 @@ from juniper_cascor_worker.constants import (
     LEGACY_ENV_TLS_KEY,
 )
 
-
 # ----------------------------------------------------------------------------
 # Per-field matrix metadata
 # ----------------------------------------------------------------------------
@@ -361,14 +360,14 @@ class TestSourceScopeGuard:
         executable = _strip_comments_and_docstrings(inspect.getsource(config_module))
         # Match os.getenv("CASCOR_…") or os.environ.get("CASCOR_…")
         bad = re.findall(r'os\.(?:getenv|environ\.get)\(["\']CASCOR_', executable)
-        assert bad == [], (f"config.py reintroduced raw legacy env reads: {bad!r}; " f"use _resolve(env, ENV_X, LEGACY_ENV_X, default) instead.")
+        assert bad == [], f"config.py reintroduced raw legacy env reads: {bad!r}; " f"use _resolve(env, ENV_X, LEGACY_ENV_X, default) instead."
 
     def test_cli_module_has_no_raw_legacy_env_reads(self):
         from juniper_cascor_worker import cli as cli_module
 
         executable = _strip_comments_and_docstrings(inspect.getsource(cli_module))
         bad = re.findall(r'os\.(?:getenv|environ\.get)\(["\']CASCOR_', executable)
-        assert bad == [], (f"cli.py reintroduced raw legacy env reads: {bad!r}; " f"use env_with_legacy_alias(ENV_X, LEGACY_ENV_X, default) instead.")
+        assert bad == [], f"cli.py reintroduced raw legacy env reads: {bad!r}; " f"use env_with_legacy_alias(ENV_X, LEGACY_ENV_X, default) instead."
 
 
 # ----------------------------------------------------------------------------
