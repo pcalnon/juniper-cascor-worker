@@ -3,7 +3,7 @@
 # Multi-stage Dockerfile for production deployment
 # =============================================================================
 # Build: docker build -t juniper-cascor-worker:latest .
-# Run:   docker run -e CASCOR_SERVER_URL=ws://juniper-cascor:8200/ws/v1/workers juniper-cascor-worker:latest
+# Run:   docker run -e JUNIPER_CASCOR_WORKER_SERVER_URL=ws://juniper-cascor:8200/ws/v1/workers juniper-cascor-worker:latest
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -60,8 +60,12 @@ RUN mkdir -p logs && chown -R juniper:juniper /app
 USER juniper
 
 # Worker configuration (overridden by Docker Compose environment)
-ENV CASCOR_SERVER_URL=ws://localhost:8200/ws/v1/workers
-ENV CASCOR_HEARTBEAT_INTERVAL=10.0
+# CFG-06 (>= 0.4.0): canonical JUNIPER_CASCOR_WORKER_* env-var defaults.
+# Legacy CASCOR_* names still work via the alias-with-deprecation helper
+# but emit a DeprecationWarning per process; setting the canonical names
+# here keeps the worker quiet by default when running the image bare.
+ENV JUNIPER_CASCOR_WORKER_SERVER_URL=ws://localhost:8200/ws/v1/workers
+ENV JUNIPER_CASCOR_WORKER_HEARTBEAT_INTERVAL=10.0
 
 # Health check — process-based (worker is a WebSocket client, not an HTTP server)
 # Verifies PID 1 (the entrypoint process) is still alive.

@@ -47,27 +47,53 @@ pre-commit run --all-files
 
 ### Environment Variables
 
+> **CFG-06 (>= 0.4.0)**: canonical names are `JUNIPER_CASCOR_WORKER_*`. Legacy `CASCOR_*` (and `CASCOR_WORKER_*`) names still work via `juniper-config-tools.env_with_legacy_alias` but emit one `DeprecationWarning` per process — see [§ Legacy env-var names](#legacy-env-var-names) below for the legacy → canonical mapping.
+
 #### WebSocket Mode (Default)
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `CASCOR_SERVER_URL` | WebSocket endpoint URL (`ws://` or `wss://`) | *(required)* |
-| `CASCOR_AUTH_TOKEN` | Token sent as `X-API-Key` header | empty |
-| `CASCOR_API_KEY` | Deprecated alias for `CASCOR_AUTH_TOKEN` | empty |
-| `CASCOR_HEARTBEAT_INTERVAL` | Heartbeat interval in seconds | `10.0` |
-| `CASCOR_TLS_CERT` | Client certificate path (mTLS) | unset |
-| `CASCOR_TLS_KEY` | Client private key path (mTLS) | unset |
-| `CASCOR_TLS_CA` | Custom CA bundle path | unset |
+| `JUNIPER_CASCOR_WORKER_SERVER_URL` | WebSocket endpoint URL (`ws://` or `wss://`) | *(required)* |
+| `JUNIPER_CASCOR_WORKER_AUTH_TOKEN` | Token sent as `X-API-Key` header | empty |
+| `JUNIPER_CASCOR_WORKER_HEARTBEAT_INTERVAL` | Heartbeat interval in seconds | `10.0` |
+| `JUNIPER_CASCOR_WORKER_TASK_TIMEOUT` | Max seconds for a single training task | `3600.0` |
+| `JUNIPER_CASCOR_WORKER_TLS_CERT` | Client certificate path (mTLS) | unset |
+| `JUNIPER_CASCOR_WORKER_TLS_KEY` | Client private key path (mTLS) | unset |
+| `JUNIPER_CASCOR_WORKER_TLS_CA` | Custom CA bundle path | unset |
+| `JUNIPER_CASCOR_WORKER_HEALTH_PORT` | In-process HTTP health server port | `8210` |
+| `JUNIPER_CASCOR_WORKER_HEALTH_BIND` | In-process HTTP health server bind address | `127.0.0.1` |
 
 #### Legacy Mode (Deprecated)
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `CASCOR_MANAGER_HOST` | Manager hostname | `127.0.0.1` |
-| `CASCOR_MANAGER_PORT` | Manager port | `50000` |
-| `CASCOR_AUTHKEY` | Authentication key | *(required)* |
-| `CASCOR_NUM_WORKERS` | Number of worker processes | `1` |
-| `CASCOR_MP_CONTEXT` | Multiprocessing context (`forkserver`/`spawn`/`fork`) | `forkserver` |
+| `JUNIPER_CASCOR_WORKER_MANAGER_HOST` | Manager hostname | `127.0.0.1` |
+| `JUNIPER_CASCOR_WORKER_MANAGER_PORT` | Manager port | `50000` |
+| `JUNIPER_CASCOR_WORKER_AUTHKEY` | Authentication key | *(required)* |
+| `JUNIPER_CASCOR_WORKER_NUM_WORKERS` | Number of worker processes | `1` |
+| `JUNIPER_CASCOR_WORKER_MP_CONTEXT` | Multiprocessing context (`forkserver`/`spawn`/`fork`) | `forkserver` |
+
+#### Legacy env-var names
+
+Pre-CFG-06 deployments using the bare `CASCOR_*` (or partial-scope `CASCOR_WORKER_*`) prefix still work — `juniper_cascor_worker.config._resolve` (which delegates to `juniper_config_tools.env_with_legacy_alias`) emits a `DeprecationWarning` naming both old and new names on first use of each legacy var. Mapping:
+
+| Legacy name | Canonical name (>= 0.4.0) |
+|---|---|
+| `CASCOR_SERVER_URL` | `JUNIPER_CASCOR_WORKER_SERVER_URL` |
+| `CASCOR_AUTH_TOKEN` | `JUNIPER_CASCOR_WORKER_AUTH_TOKEN` |
+| `CASCOR_API_KEY` | `JUNIPER_CASCOR_WORKER_AUTH_TOKEN` (second legacy alias — dual-fallback preserved) |
+| `CASCOR_HEARTBEAT_INTERVAL` | `JUNIPER_CASCOR_WORKER_HEARTBEAT_INTERVAL` |
+| `CASCOR_TASK_TIMEOUT` | `JUNIPER_CASCOR_WORKER_TASK_TIMEOUT` |
+| `CASCOR_TLS_CERT` | `JUNIPER_CASCOR_WORKER_TLS_CERT` |
+| `CASCOR_TLS_KEY` | `JUNIPER_CASCOR_WORKER_TLS_KEY` |
+| `CASCOR_TLS_CA` | `JUNIPER_CASCOR_WORKER_TLS_CA` |
+| `CASCOR_WORKER_HEALTH_PORT` | `JUNIPER_CASCOR_WORKER_HEALTH_PORT` |
+| `CASCOR_WORKER_HEALTH_BIND` | `JUNIPER_CASCOR_WORKER_HEALTH_BIND` |
+| `CASCOR_MANAGER_HOST` | `JUNIPER_CASCOR_WORKER_MANAGER_HOST` |
+| `CASCOR_MANAGER_PORT` | `JUNIPER_CASCOR_WORKER_MANAGER_PORT` |
+| `CASCOR_AUTHKEY` | `JUNIPER_CASCOR_WORKER_AUTHKEY` |
+| `CASCOR_NUM_WORKERS` | `JUNIPER_CASCOR_WORKER_NUM_WORKERS` |
+| `CASCOR_MP_CONTEXT` | `JUNIPER_CASCOR_WORKER_MP_CONTEXT` |
 
 ### Key Files
 
@@ -253,8 +279,8 @@ juniper-cascor-worker [OPTIONS]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--server-url TEXT` | `CASCOR_SERVER_URL` | WebSocket endpoint (e.g., `ws://host:8200/ws/v1/workers`) |
-| `--auth-token TEXT` | `CASCOR_AUTH_TOKEN` | Token for `X-API-Key` authentication |
+| `--server-url TEXT` | `JUNIPER_CASCOR_WORKER_SERVER_URL` | WebSocket endpoint (e.g., `ws://host:8200/ws/v1/workers`) |
+| `--auth-token TEXT` | `JUNIPER_CASCOR_WORKER_AUTH_TOKEN` | Token for `X-API-Key` authentication |
 | `--heartbeat-interval FLOAT` | `10.0` | Heartbeat interval in seconds |
 | `--tls-cert PATH` | unset | Client certificate path (mTLS) |
 | `--tls-key PATH` | unset | Client key path (mTLS) |
@@ -268,7 +294,7 @@ juniper-cascor-worker [OPTIONS]
 |------|---------|-------------|
 | `--manager-host TEXT` | `127.0.0.1` | Manager hostname |
 | `--manager-port INT` | `50000` | Manager port (1-65535) |
-| `--authkey TEXT` | `CASCOR_AUTHKEY` | Authentication key (required) |
+| `--authkey TEXT` | `JUNIPER_CASCOR_WORKER_AUTHKEY` | Authentication key (required) |
 | `--workers INT` | `1` | Number of worker processes |
 | `--mp-context CHOICE` | `forkserver` | Multiprocessing context (`forkserver`/`spawn`/`fork`) |
 
