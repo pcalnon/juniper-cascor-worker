@@ -36,7 +36,7 @@ Verified compatible versions:
 
 | juniper-data | juniper-cascor | juniper-canopy | data-client | cascor-client | cascor-worker |
 |--------------|----------------|----------------|-------------|---------------|---------------|
-| 0.6.x        | 0.4.x          | 0.4.x          | >=0.4.1     | >=0.4.0       | >=0.3.0       |
+| 0.6.x        | 0.5.x          | 0.5.x          | >=0.4.1     | >=0.4.0       | >=0.4.0       |
 
 For full-stack Docker deployment and integration tests, see [`juniper-deploy`](https://github.com/pcalnon/juniper-deploy).
 
