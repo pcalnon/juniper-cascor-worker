@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-23
+
 ### Changed
 
 - **CFG-06** (v7 roadmap §20): all 15 worker env vars renamed from bare `CASCOR_*` (or partial-scope `CASCOR_WORKER_*`) to the ecosystem-canonical `JUNIPER_CASCOR_WORKER_*` prefix. Legacy names continue to work via the shared `juniper-config-tools>=0.1.0,<0.2.0` alias-with-deprecation helper (added as a new runtime dep — stdlib-only, does not regress the `tests/test_no_pydantic_at_runtime.py` invariant). Each legacy use emits one `DeprecationWarning` per process naming both old + new env-var names. Affected constants: `ENV_*` in `juniper_cascor_worker/constants.py:151-165` now hold canonical names; new `LEGACY_ENV_*` constants hold the bare-`CASCOR_*` / `CASCOR_WORKER_*` legacy values. `WorkerConfig.from_env()` and `cli.py` route all reads through the helper; the dual-legacy `auth_token` chain (`CASCOR_AUTH_TOKEN` + `CASCOR_API_KEY` → `JUNIPER_CASCOR_WORKER_AUTH_TOKEN`) is preserved. **Version bumped 0.3.0 → 0.4.0** (additive runtime dep + behaviour-change-with-warning warrants a minor). New regression suite at `tests/test_cfg_06_env_prefix_aliases.py` (85 tests) pins the per-field × 4-env-state matrix (14 × 4 = 56 cases), the dual-legacy chain (4 cases), the `from_env(env: Mapping)` test-injection contract (5 cases, see below), source-level scope guards on `config.py` + `cli.py` (no raw `os.getenv("CASCOR_*")`), and the no-pydantic-at-runtime invariant (3 subprocess-isolated cases including juniper-config-tools itself). Mirrors the cascor CFG-03/05 pattern; follows the proven juniper-doc-tools / juniper-ci-tools migration shape with juniper-config-tools as the new shared package home (Wave 0 + Wave 1 + Wave 2 of the [juniper-config-tools PyPI migration plan](https://github.com/pcalnon/juniper-ml/blob/main/notes/JUNIPER_CONFIG_TOOLS_PYPI_MIGRATION_PLAN_2026-05-22.md)).
@@ -18,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`util/test_agents_md_version_drift.py`** -- portable port of juniper-ml's lint test pinning `AGENTS.md`'s `**Version**:` header to `pyproject.toml`'s `[project].version`. Catches the failure class where a `pyproject.toml` bump leaves the agent-facing contract stale. Preventive-only here: cascor-worker's `AGENTS.md` and `pyproject.toml` are already in sync at `0.3.0`. Wired into the CI tests job next to the existing `test_workflow_script_paths.py` lint.
+- **`util/test_agents_md_version_drift.py`** -- portable port of juniper-ml's lint test pinning `AGENTS.md`'s `**Version**:` header to `pyproject.toml`'s `[project].version`. Catches the failure class where a `pyproject.toml` bump leaves the agent-facing contract stale. Preventive-only here: cascor-worker's `AGENTS.md` and `pyproject.toml` are already in sync at `0.4.0`. Wired into the CI tests job next to the existing `test_workflow_script_paths.py` lint.
 
 - **METRICS-MON R3.7 (soak complete)**: macOS leg of the unit-tests CI matrix flipped from `experimental: true` → `experimental: false`, making the `macos-latest` (Python 3.12) leg **required**. Failures on macOS now block the job. The `continue-on-error: ${{ matrix.experimental == true }}` job-level guard is preserved as a future-proof escape hatch for future experimental matrix entries; with `experimental: false` it evaluates to `false`. Soak window 2026-05-01 → 2026-05-15 confirmed clean (per user direction). Closes the post-soak follow-up of the R3.7 fan-out.
 
