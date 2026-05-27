@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`_FILE`-suffix indirection in `_resolve`**: every env var the worker resolves
+  (`JUNIPER_CASCOR_WORKER_*` canonical names and their legacy aliases) now
+  honors a `<NAME>_FILE` companion that contains the path to a file with the
+  value. The file's content is read with `strip()`, matching the
+  Docker-secrets / k8s-secrets convention. Order of precedence per name pair:
+  canonical `_FILE` → canonical direct → legacy `_FILE` (with one
+  `DeprecationWarning`) → legacy direct (existing warning shape preserved) →
+  default. Missing / empty / unreadable files fall through silently so an
+  un-populated Docker secret doesn't masquerade as a deliberate empty value.
+
+  Closes the gap that left worker → cascor auth silently broken under
+  juniper-deploy's DEPLOY-09 hardening (compose sets
+  `CASCOR_AUTH_TOKEN_FILE=/run/secrets/cascor_auth_token` and mounts the
+  secret file, but pre-fix `_resolve` only read env-var values — worker
+  booted with `auth_token=""`). New regression suite at
+  `tests/test_resolve_file_indirection.py` (16 tests) pins canonical `_FILE`
+  precedence, legacy `_FILE` deprecation-warning shape (names both legacy
+  and canonical `_FILE` vars), file-content stripping, fall-through on
+  missing / empty / unreadable / directory paths, production-path
+  (`os.environ`) parity, and `WorkerConfig.from_env` end-to-end resolution
+  from `CASCOR_AUTH_TOKEN_FILE`.
+
+  Production `_resolve` no longer delegates to
+  `juniper_config_tools.env_with_legacy_alias`; the helper does not currently
+  understand the `_FILE` suffix and adding that handling outside it would
+  duplicate the env lookup. Once `juniper_config_tools >= 0.2` supports
+  `_FILE` natively, the inline path can collapse back to a delegation. The
+  helper remains imported (pinned by the CFG-06 source-scope lint) so the
+  dependency surface is unchanged.
+
 ### Fixed
 
 - **Lockfile**: `requirements-cpu.lock` regenerated to include `juniper-config-tools==0.1.0`. PR [#88](https://github.com/pcalnon/juniper-cascor-worker/pull/88) patched the same CFG-06 fallout in `requirements.lock` but missed the CPU-only sibling, leaving the CI `Check requirements-cpu.lock contains every pyproject dep` step annotating every PR. Transitive pins refreshed alongside: `filelock` 3.25.2 → 3.29.0, `fsspec` 2026.2.0 → 2026.4.0, `numpy` 2.4.3 → 2.4.4. The CPU-only Docker container build now resolves all worker runtime deps from a single lockfile.

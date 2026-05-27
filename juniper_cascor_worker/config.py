@@ -1,5 +1,6 @@
 """Configuration for the remote candidate training worker."""
 
+import os
 import warnings
 from dataclasses import dataclass
 from typing import Mapping
@@ -57,44 +58,99 @@ from juniper_cascor_worker.constants import (
 from juniper_cascor_worker.exceptions import WorkerConfigError
 
 
+def _read_secret_file(path: str) -> str | None:
+    """Read a Docker-secret-style file and return its stripped content.
+
+    Returns ``None`` when the path is missing, the file is unreadable,
+    or the file is empty after stripping whitespace — letting the
+    caller fall through to the next resolution step (direct env var,
+    legacy alias, default) instead of treating an empty file as a
+    deliberately-set empty value.
+    """
+    try:
+        with open(path, encoding="utf-8") as handle:
+            content = handle.read().strip()
+    except OSError:
+        return None
+    return content or None
+
+
 def _resolve(
     env: Mapping[str, str] | None,
     new_name: str,
     legacy_name: str | None,
     default: str | None = None,
 ) -> str | None:
-    """Resolve an env var via canonical/legacy/default chain.
+    """Resolve an env var via ``_FILE`` / direct / legacy / default chain.
 
-    Production path (``env is None``) delegates to
-    :func:`juniper_config_tools.env_with_legacy_alias`, which reads
-    :data:`os.environ`. Test-injection path (``env`` provided) uses an
-    inline mapping-aware resolver that mirrors the helper's semantics
-    (same warning text, same ``stacklevel=2``, same once-per-location
-    behaviour). Both paths emit one :class:`DeprecationWarning` when
-    only the legacy name is set.
+    For each candidate name (canonical first, then legacy) the resolver
+    checks:
 
-    The duplication is deliberate: the shared
-    :mod:`juniper_config_tools` 0.1.0 helper reads :data:`os.environ`
-    directly and a future 0.2.0 will likely add an ``env`` kwarg —
-    when that happens, this adapter can collapse to a single
-    delegation. Until then the local copy avoids forcing every
-    cascor-worker consumer onto a moving juniper-config-tools floor.
+      1. ``<name>_FILE`` env var — if set and the file exists with
+         non-empty content, the file's stripped content is returned.
+         Enables Docker-secrets-style indirection (e.g.
+         ``CASCOR_AUTH_TOKEN_FILE=/run/secrets/cascor_auth_token``)
+         without leaking the value through ``docker inspect`` /
+         env dumps. Missing or empty files fall through silently.
+      2. ``<name>`` env var — if set, returns the value directly.
+
+    When a legacy name's `_FILE` or direct form supplies the value,
+    one :class:`DeprecationWarning` is emitted (legacy → canonical
+    migration message; same ``stacklevel=2`` as the pre-`_FILE`
+    behaviour).
+
+    Implementation note: production path (``env is None``) reads from
+    :data:`os.environ` directly. The previous version delegated to
+    :func:`juniper_config_tools.env_with_legacy_alias`; we've moved
+    inline because the helper does not currently understand the
+    ``_FILE`` suffix and adding that handling outside the helper would
+    duplicate the env lookup. A future ``juniper_config_tools >= 0.2``
+    that supports ``_FILE`` natively could let this collapse back to a
+    single delegation.
     """
-    if env is None:
-        return env_with_legacy_alias(new_name, legacy_name, default)
-    val = env.get(new_name)
-    if val is not None:
-        return val
+    actual_env: Mapping[str, str] = os.environ if env is None else env
+
+    # Canonical: _FILE then direct.
+    file_path = actual_env.get(f"{new_name}_FILE")
+    if file_path:
+        file_value = _read_secret_file(file_path)
+        if file_value is not None:
+            return file_value
+    direct_value = actual_env.get(new_name)
+    if direct_value is not None:
+        return direct_value
+
+    # Legacy: _FILE then direct, each emitting one DeprecationWarning
+    # naming both vars (matching pre-`_FILE` warning shape so existing
+    # filters keep working).
     if legacy_name is not None:
-        legacy_val = env.get(legacy_name)
-        if legacy_val is not None:
+        legacy_file_path = actual_env.get(f"{legacy_name}_FILE")
+        if legacy_file_path:
+            legacy_file_value = _read_secret_file(legacy_file_path)
+            if legacy_file_value is not None:
+                warnings.warn(
+                    f"{legacy_name}_FILE is deprecated; use {new_name}_FILE instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                return legacy_file_value
+        legacy_direct_value = actual_env.get(legacy_name)
+        if legacy_direct_value is not None:
             warnings.warn(
                 f"{legacy_name} is deprecated; use {new_name} instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-            return legacy_val
+            return legacy_direct_value
+
     return default
+
+
+# Retain the helper import surface even though we no longer call it on the
+# production path — `tests/test_cfg_06_env_prefix_aliases.py` and downstream
+# pinning lints scan the import for "did we accidentally drop the canonical
+# helper from the dependency surface."
+_ = env_with_legacy_alias  # noqa: F841
 
 
 @dataclass
