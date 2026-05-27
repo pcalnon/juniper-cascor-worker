@@ -367,7 +367,7 @@ class TestSourceScopeGuard:
 
         executable = _strip_comments_and_docstrings(inspect.getsource(cli_module))
         bad = re.findall(r'os\.(?:getenv|environ\.get)\(["\']CASCOR_', executable)
-        assert bad == [], f"cli.py reintroduced raw legacy env reads: {bad!r}; " f"use env_with_legacy_alias(ENV_X, LEGACY_ENV_X, default) instead."
+        assert bad == [], f"cli.py reintroduced raw legacy env reads: {bad!r}; " "use _resolve(None, ENV_X, LEGACY_ENV_X, default) (preferred — " "honors `_FILE` indirection) or env_with_legacy_alias(ENV_X, " "LEGACY_ENV_X, default) (no `_FILE` support) instead."
 
 
 # ----------------------------------------------------------------------------

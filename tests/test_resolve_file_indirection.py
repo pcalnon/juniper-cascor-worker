@@ -267,3 +267,103 @@ class TestSecretFileHelper:
             assert _resolve(env, ENV_AUTH_TOKEN, LEGACY_ENV_AUTH_TOKEN, default="") == "direct-fallback"
         finally:
             path.chmod(0o600)  # so pytest tmp_path cleanup can remove it
+
+
+# ---------------------------------------------------------------------------
+# End-to-end via ``cli.main()`` — the production code path
+# ---------------------------------------------------------------------------
+
+
+class TestCliFileIndirection:
+    """The production bug surface — ``cli.py:_run_websocket`` was calling
+    ``env_with_legacy_alias`` directly (no ``_FILE`` support) even after
+    ``config._resolve`` got the suffix fix. These tests pin that the CLI
+    now resolves ``CASCOR_AUTH_TOKEN_FILE`` through ``_resolve`` so
+    Docker-secrets-style indirection works at the production entry point,
+    not just inside ``WorkerConfig.from_env``.
+    """
+
+    def _build_args(self) -> "object":  # noqa: ANN001
+        from unittest.mock import MagicMock
+
+        mock_args = MagicMock()
+        mock_args.legacy = False
+        mock_args.cascor_path = None
+        mock_args.log_level = "WARNING"
+        mock_args.server_url = None
+        mock_args.auth_token = None
+        mock_args.heartbeat_interval = 10.0
+        mock_args.task_timeout = 3600.0
+        mock_args.tls_cert = None
+        mock_args.tls_key = None
+        mock_args.tls_ca = None
+        return mock_args
+
+    def _fake_agent_factory(self) -> "tuple[type, list]":  # noqa: ANN001
+        captured_config: list = []
+
+        class _FakeAgent:
+            def __init__(self, config) -> None:  # type: ignore[no-untyped-def]
+                captured_config.append(config)
+
+            def stop(self) -> None:
+                pass
+
+            async def run(self) -> None:
+                return
+
+        return _FakeAgent, captured_config
+
+    def _drive_run_websocket(
+        self,
+        clean_env: pytest.MonkeyPatch,
+        secret_file: Path,
+        env_var_name: str,
+    ) -> "object":
+        """Drive ``_run_websocket`` with a fake agent + mocked signal /
+        asyncio plumbing so no real event loop or signal handler leaks
+        into adjacent tests."""
+        from unittest.mock import patch
+
+        from juniper_cascor_worker.cli import _run_websocket
+
+        clean_env.setenv(ENV_SERVER_URL, "ws://juniper-cascor:8200/ws/v1/workers")
+        clean_env.setenv(env_var_name, str(secret_file))
+
+        fake_agent_cls, captured = self._fake_agent_factory()
+
+        with patch("juniper_cascor_worker.worker.CascorWorkerAgent", fake_agent_cls), patch("juniper_cascor_worker.cli.signal.signal"), patch("juniper_cascor_worker.cli.asyncio.run"):
+            _run_websocket(self._build_args())
+
+        assert captured, "_run_websocket never reached WorkerConfig construction"
+        return captured[0]
+
+    def test_run_websocket_loads_auth_token_from_legacy_file(
+        self,
+        clean_env: pytest.MonkeyPatch,
+        secret_file: Path,
+    ) -> None:
+        """The exact juniper-deploy DEPLOY-09 scenario."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            config = self._drive_run_websocket(clean_env, secret_file, f"{LEGACY_ENV_AUTH_TOKEN}_FILE")
+        assert config.auth_token == "MySecretToken123", (  # type: ignore[attr-defined]
+            f"cli.py did not honor {LEGACY_ENV_AUTH_TOKEN}_FILE: "
+            f"got auth_token={config.auth_token!r}"  # type: ignore[attr-defined]
+        )
+        assert config.server_url == "ws://juniper-cascor:8200/ws/v1/workers"  # type: ignore[attr-defined]
+
+    def test_run_websocket_loads_auth_token_from_canonical_file(
+        self,
+        clean_env: pytest.MonkeyPatch,
+        secret_file: Path,
+    ) -> None:
+        """Canonical ``JUNIPER_CASCOR_WORKER_AUTH_TOKEN_FILE`` shape — no
+        deprecation warning expected."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config = self._drive_run_websocket(clean_env, secret_file, f"{ENV_AUTH_TOKEN}_FILE")
+
+        assert config.auth_token == "MySecretToken123"  # type: ignore[attr-defined]
+        # Canonical `_FILE` — no DeprecationWarning expected.
+        assert [w for w in caught if issubclass(w.category, DeprecationWarning)] == []
