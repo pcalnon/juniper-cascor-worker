@@ -9,7 +9,15 @@ import threading
 
 from juniper_config_tools import env_with_legacy_alias
 
+from juniper_cascor_worker.config import _resolve
 from juniper_cascor_worker.constants import DEFAULT_HEARTBEAT_INTERVAL, DEFAULT_LOG_LEVEL, DEFAULT_MANAGER_HOST, DEFAULT_MANAGER_PORT, DEFAULT_MP_CONTEXT, DEFAULT_NUM_WORKERS, DEFAULT_TASK_TIMEOUT, ENV_AUTH_TOKEN, ENV_AUTHKEY, ENV_SERVER_URL, ENV_TASK_TIMEOUT, LEGACY_ENV_API_KEY, LEGACY_ENV_AUTH_TOKEN, LEGACY_ENV_AUTHKEY, LEGACY_ENV_SERVER_URL, LEGACY_ENV_TASK_TIMEOUT, LOG_FORMAT, VALID_LOG_LEVELS, VALID_MP_CONTEXTS
+
+# Retain the helper import even though every executable call site below now
+# routes through ``_resolve`` (which handles ``_FILE``-suffix indirection in
+# addition to legacy aliasing). Pinned by the CFG-06 lint that asserts
+# ``cli.py`` does not regress to raw ``os.environ.get`` calls and that the
+# canonical helper stays in the import surface.
+_ = env_with_legacy_alias  # noqa: F841
 
 
 def main() -> None:
@@ -74,13 +82,18 @@ def _run_websocket(args: argparse.Namespace) -> None:
     from juniper_cascor_worker.config import WorkerConfig
     from juniper_cascor_worker.worker import CascorWorkerAgent
 
-    # CFG-06: route every env read through env_with_legacy_alias so legacy
-    # ``CASCOR_*`` names emit a DeprecationWarning naming both old + new
-    # vars. ENV_AUTH_TOKEN has two legacy aliases (chain via ``or``).
-    server_url = args.server_url or env_with_legacy_alias(ENV_SERVER_URL, LEGACY_ENV_SERVER_URL, "")
-    auth_token = args.auth_token or env_with_legacy_alias(ENV_AUTH_TOKEN, LEGACY_ENV_AUTH_TOKEN) or env_with_legacy_alias(ENV_AUTH_TOKEN, LEGACY_ENV_API_KEY, "")
+    # CFG-06 + ``_FILE``-suffix indirection: route every env read through
+    # ``_resolve`` so legacy ``CASCOR_*`` names emit a DeprecationWarning
+    # naming both old + new vars, AND ``<NAME>_FILE`` (Docker secrets) is
+    # honored. The pre-#94 cli.py used ``env_with_legacy_alias`` directly,
+    # which has no ``_FILE`` support — that's why DEPLOY-09's
+    # ``CASCOR_AUTH_TOKEN_FILE=/run/secrets/cascor_auth_token`` mount left
+    # ``auth_token=""`` until the cli.py side was also patched.
+    # ``ENV_AUTH_TOKEN`` has two legacy aliases (chain via ``or``).
+    server_url = args.server_url or _resolve(None, ENV_SERVER_URL, LEGACY_ENV_SERVER_URL, "")
+    auth_token = args.auth_token or _resolve(None, ENV_AUTH_TOKEN, LEGACY_ENV_AUTH_TOKEN) or _resolve(None, ENV_AUTH_TOKEN, LEGACY_ENV_API_KEY, "")
 
-    task_timeout = args.task_timeout if args.task_timeout != DEFAULT_TASK_TIMEOUT else float(env_with_legacy_alias(ENV_TASK_TIMEOUT, LEGACY_ENV_TASK_TIMEOUT, str(DEFAULT_TASK_TIMEOUT)))
+    task_timeout = args.task_timeout if args.task_timeout != DEFAULT_TASK_TIMEOUT else float(_resolve(None, ENV_TASK_TIMEOUT, LEGACY_ENV_TASK_TIMEOUT, str(DEFAULT_TASK_TIMEOUT)))
 
     config = WorkerConfig(
         server_url=server_url,
@@ -123,7 +136,7 @@ def _run_legacy(args: argparse.Namespace) -> None:
     from juniper_cascor_worker.config import WorkerConfig
     from juniper_cascor_worker.worker import CandidateTrainingWorker
 
-    authkey = args.authkey or env_with_legacy_alias(ENV_AUTHKEY, LEGACY_ENV_AUTHKEY, "")
+    authkey = args.authkey or _resolve(None, ENV_AUTHKEY, LEGACY_ENV_AUTHKEY, "")
 
     config = WorkerConfig(
         manager_host=args.manager_host,

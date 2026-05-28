@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`cli.py` now routes env reads through `_resolve` so `_FILE` indirection
+  is honored at the production entry point**. The `_FILE`-suffix support
+  shipped in [#94](https://github.com/pcalnon/juniper-cascor-worker/pull/94)
+  only fixed `config._resolve` / `WorkerConfig.from_env`; the WebSocket-mode
+  CLI (`_run_websocket`) and legacy-mode CLI (`_run_legacy`) both called
+  `juniper_config_tools.env_with_legacy_alias` **directly** — which has no
+  `_FILE` handling. End-to-end verification against the rebuilt worker image
+  after #94 surfaced the gap immediately: cascor's `api_keys` populated
+  correctly, manual `WorkerConfig.from_env()` inside the container returned
+  the token, but the production `cli.main()` path still produced
+  `auth_token=""` because `args.auth_token or env_with_legacy_alias(...)`
+  never looked at `CASCOR_AUTH_TOKEN_FILE`. Workers 403'd on every WS
+  handshake.
+
+  All six `env_with_legacy_alias(...)` call sites in `cli.py` are now
+  `_resolve(None, ...)` — same name pair, same precedence, plus `_FILE`
+  indirection. The helper import is preserved (pinned by the CFG-06
+  source-scope lint) so the dependency surface is unchanged. The lint's
+  error message was updated to acknowledge both `_resolve` (preferred —
+  honors `_FILE`) and `env_with_legacy_alias` (no `_FILE` support) as
+  acceptable resolvers.
+
+  New regression tests in `tests/test_resolve_file_indirection.py`:
+  `TestCliFileIndirection` (2 tests) drives `cli._run_websocket` with a
+  fake `CascorWorkerAgent` and mocked `signal.signal` / `asyncio.run`,
+  pinning that `CASCOR_AUTH_TOKEN_FILE` (legacy `_FILE`) and
+  `JUNIPER_CASCOR_WORKER_AUTH_TOKEN_FILE` (canonical `_FILE`) both flow
+  through `cli.main()` into `WorkerConfig.auth_token`.
+
 ### Added
 
 - **`_FILE`-suffix indirection in `_resolve`**: every env var the worker resolves
