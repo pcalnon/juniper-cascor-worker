@@ -58,6 +58,12 @@ dependencies = [
     # decision juniper-ml#168). Pinned <0.2.0 to opt out of future API
     # growth that may add unrelated helpers.
     "juniper-config-tools>=0.1.0,<0.2.0",
+    # CW-05 Approach A (juniper-cascor-worker#97): the candidate-training core
+    # (CandidateUnit + activation registry + utils + logging) the worker executes,
+    # shipped as a package so the worker no longer needs the cascor source tree on
+    # sys.path via --cascor-path. Provides the top-level ``candidate_unit`` import.
+    # Pulls torch/numpy (already direct deps) + PyYAML.
+    "juniper-cascor-core>=0.1.0",
 ]
 
 [project.optional-dependencies]

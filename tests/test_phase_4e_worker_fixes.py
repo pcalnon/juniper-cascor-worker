@@ -184,5 +184,10 @@ def test_task_executor_get_activation_function_invokes_torch() -> None:
     pytest.importorskip("torch")
     from juniper_cascor_worker import task_executor
 
-    fn, deriv = task_executor._get_activation_function("sigmoid")
-    assert callable(fn) and callable(deriv)
+    # CW-05: _get_activation_function now returns a single callable resolved from
+    # juniper-cascor-core's ACTIVATION_MAP (CandidateUnit supplies the derivative).
+    fn = task_executor._get_activation_function("sigmoid")
+    assert callable(fn)
+    # gap #4: the TitleCase names cascor dispatches (e.g. 'Tanh') resolve too, instead
+    # of silently falling back to a different activation.
+    assert callable(task_executor._get_activation_function("Tanh"))

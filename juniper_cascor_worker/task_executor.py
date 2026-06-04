@@ -27,25 +27,23 @@ from typing import Any
 
 import numpy as np
 
-from juniper_cascor_worker.constants import ACTIVATION_RELU, ACTIVATION_SIGMOID, ACTIVATION_TANH, CANDIDATE_UNIT_LOG_LEVEL, DEFAULT_ACTIVATION, DEFAULT_CORRELATION, DEFAULT_DENOMINATOR, DEFAULT_DISPLAY_FREQUENCY, DEFAULT_LEARNING_RATE, DEFAULT_NUMERATOR, DEFAULT_RANDOM_MAX_VALUE, DEFAULT_RANDOM_VALUE_SCALE, DEFAULT_SEQUENCE_MAX_VALUE, DEFAULT_TRAINING_EPOCHS, NO_BEST_CORR_IDX, NO_EPOCHS_COMPLETED
+from juniper_cascor_worker.constants import CANDIDATE_UNIT_LOG_LEVEL, DEFAULT_ACTIVATION, DEFAULT_CORRELATION, DEFAULT_DENOMINATOR, DEFAULT_DISPLAY_FREQUENCY, DEFAULT_LEARNING_RATE, DEFAULT_NUMERATOR, DEFAULT_RANDOM_MAX_VALUE, DEFAULT_RANDOM_VALUE_SCALE, DEFAULT_SEQUENCE_MAX_VALUE, DEFAULT_TRAINING_EPOCHS, NO_BEST_CORR_IDX, NO_EPOCHS_COMPLETED
 
 logger = logging.getLogger(__name__)
 
 
 def _get_candidate_unit_class() -> Any:
-    """Resolve the cascor ``CandidateUnit`` class via runtime import (CW-05).
+    """Resolve the cascor ``CandidateUnit`` class from the juniper-cascor-core package.
 
-    Centralises the sys.path-based import used to bridge the worker process
-    to the cascor codebase. Raises ``ImportError`` with a clear, actionable
-    message if the cascor source tree is not importable; this is the single
-    place to update when CW-05 Approach A (juniper-cascor-core PyPI package)
-    is implemented and the runtime import can be replaced with a normal
-    package dependency.
+    CW-05 Approach A: the candidate-training core now ships as the ``juniper-cascor-core``
+    dependency (which provides the top-level ``candidate_unit`` package), so this is a normal
+    package import -- no ``--cascor-path`` flag or cascor source-tree mount is needed. Kept as
+    a single helper so the (lazy, torch-pulling) import stays in one place.
     """
     try:
         from candidate_unit.candidate_unit import CandidateUnit
     except ImportError as exc:
-        raise ImportError("CasCor codebase not found. Ensure the JuniperCascor src " "directory is on sys.path via --cascor-path or installed in " "the environment. CW-05 Approach A (juniper-cascor-core " f"package) is the canonical long-term fix. Original error: {exc}") from exc
+        raise ImportError("CandidateUnit is not importable -- the 'juniper-cascor-core' dependency is missing " "or broken (it provides the top-level 'candidate_unit' package). Install or repair " f"juniper-cascor-core. Original error: {exc}") from exc
     return CandidateUnit
 
 
@@ -97,8 +95,12 @@ def execute_training_task(
             CandidateUnit__display_frequency=training_params.get("display_frequency", DEFAULT_DISPLAY_FREQUENCY),
             CandidateUnit__random_seed=candidate_data.get("candidate_seed"),
             CandidateUnit__random_value_scale=candidate_data.get("random_value_scale", DEFAULT_RANDOM_VALUE_SCALE),
-            CandidateUnit__random_max_value=candidate_data.get("random_max_value", DEFAULT_RANDOM_MAX_VALUE),
-            CandidateUnit__sequence_max_value=candidate_data.get("sequence_max_value", DEFAULT_SEQUENCE_MAX_VALUE),
+            # CW-05 gap #5: cascor's remote dispatch float()-coerces these int-valued params for
+            # the wire, but CandidateUnit feeds them to random.randint()/range(); coerce back to
+            # int so candidate training does not raise
+            # "'float' object cannot be interpreted as an integer".
+            CandidateUnit__random_max_value=int(candidate_data.get("random_max_value", DEFAULT_RANDOM_MAX_VALUE)),
+            CandidateUnit__sequence_max_value=int(candidate_data.get("sequence_max_value", DEFAULT_SEQUENCE_MAX_VALUE)),
             CandidateUnit__uuid=candidate_uuid,
             CandidateUnit__candidate_index=candidate_index,
             CandidateUnit__log_level_name=CANDIDATE_UNIT_LOG_LEVEL,
@@ -191,24 +193,25 @@ def execute_training_task(
 
 
 def _get_activation_function(name: str):
-    """Resolve an activation function by name.
+    """Resolve an activation name to the single callable ``CandidateUnit`` expects.
 
-    Mirrors CascadeCorrelationNetwork._get_activation_function() to produce
-    the same (function, derivative) tuple expected by CandidateUnit.
+    Uses juniper-cascor-core's canonical ``ActivationWithDerivative.ACTIVATION_MAP`` (both
+    TitleCase nn-module and lowercase functional variants) so the worker resolves exactly the
+    activations cascor dispatches -- fixing the ``Unknown activation 'Tanh'`` fallback to a
+    different activation (CW-05 gap #4). ``CandidateUnit`` wraps this callable in
+    ``ActivationWithDerivative``, which supplies the derivative, so the worker no longer
+    hand-maintains a partial ``(fn, derivative)`` map -- which also mismatched the current
+    ``CandidateUnit`` API (it takes a callable, not a tuple).
 
-    CW-08: torch is imported lazily here so that simply importing
-    ``task_executor`` (e.g. for type hints or test collection) does not pay
-    the torch import cost. The first call into this helper triggers the
-    import; subsequent calls reuse the cached module from ``sys.modules``.
+    CW-08: ``candidate_unit`` (juniper-cascor-core) pulls torch, so this stays lazy.
     """
-    import torch
+    from utils.activation import ActivationWithDerivative
 
-    activations = {
-        ACTIVATION_SIGMOID: (torch.sigmoid, lambda x: torch.sigmoid(x) * (1 - torch.sigmoid(x))),
-        ACTIVATION_TANH: (torch.tanh, lambda x: 1 - torch.tanh(x) ** 2),
-        ACTIVATION_RELU: (torch.relu, lambda x: (x > 0).float()),
-    }
-    if name not in activations:
-        logger.warning("Unknown activation '%s', falling back to %s", name, DEFAULT_ACTIVATION)
-        name = DEFAULT_ACTIVATION
-    return activations[name]
+    amap = ActivationWithDerivative.ACTIVATION_MAP
+    fn = amap.get(name)
+    if fn is None and isinstance(name, str):
+        fn = amap.get(name.lower())
+    if fn is None:
+        logger.warning("Unknown activation '%s', falling back to '%s'", name, DEFAULT_ACTIVATION)
+        fn = amap.get(DEFAULT_ACTIVATION) or amap.get(str(DEFAULT_ACTIVATION).lower())
+    return fn
