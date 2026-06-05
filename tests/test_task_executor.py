@@ -144,7 +144,9 @@ class TestImportError:
         tensors = _make_tensors()
 
         with patch.dict(sys.modules, {"candidate_unit": None, "candidate_unit.candidate_unit": None}):
-            with pytest.raises(ImportError, match="CasCor codebase not found"):
+            # CW-05: candidate_unit now ships in the juniper-cascor-core dependency, so the
+            # import-failure message points at the missing package rather than --cascor-path.
+            with pytest.raises(ImportError, match="juniper-cascor-core"):
                 execute_training_task(candidate_data, training_params, tensors)
 
 
