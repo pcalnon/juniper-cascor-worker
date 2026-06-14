@@ -12,7 +12,7 @@ from juniper_cascor_worker.config import WorkerConfig
 from juniper_cascor_worker.exceptions import WorkerConfigError, WorkerConnectionError, WorkerError
 from juniper_cascor_worker.worker import CandidateTrainingWorker, CascorWorkerAgent
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "CascorWorkerAgent",

@@ -7,8 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Build provenance on `/v1/health`.** The worker now reports the source
+  ``git_sha`` and ISO-8601 ``build_date`` baked into its image at build time
+  (new `GIT_SHA` / `BUILD_DATE` build-args → OCI labels +
+  `JUNIPER_CASCOR_WORKER_GIT_SHA` / `_BUILD_DATE` env vars in the Dockerfile,
+  read by `HealthServer`). Both are ``null`` when the worker runs outside a
+  provenance-stamped image (local dev / bare build). Foundation for the
+  ecosystem stale-image-detection effort — see juniper-ml
+  ``notes/BUILD_PROVENANCE_DESIGN_2026-06-14.md``. The image also gains the
+  standard `org.opencontainers.image.revision` / `.created` / `.version`
+  labels.
+
 ### Fixed
 
+- **`juniper_cascor_worker.__version__` aligned `0.3.0` → `0.4.0`** to match
+  `pyproject.toml` `[project].version` and `AGENTS.md`. The health probe reports
+  the installed-distribution version via `importlib.metadata`, so this stale
+  module constant was latent, but it could mislead code importing `__version__`
+  directly.
 - **`cli.py` now routes env reads through `_resolve` so `_FILE` indirection
   is honored at the production entry point**. The `_FILE`-suffix support
   shipped in [#94](https://github.com/pcalnon/juniper-cascor-worker/pull/94)
