@@ -8,7 +8,7 @@ CW-05 (Phase 4E, interim — Approach B):
     The CandidateUnit type is sourced via a runtime ``sys.path``-resolved
     import (``from candidate_unit.candidate_unit import CandidateUnit``).
     This is a known cross-repo coupling — see the roadmap's CW-05 entry. The
-    canonical fix (Approach A) is to publish ``juniper-cascor-core`` as a
+    canonical fix (Approach A) is to publish ``juniper-cascor-model`` as a
     proper PyPI package with the shared types so the worker can declare a
     pinned dependency. That work is deferred; in the meantime, all dynamic
     imports are routed through ``_get_candidate_unit_class`` so there is a
@@ -33,9 +33,9 @@ logger = logging.getLogger(__name__)
 
 
 def _get_candidate_unit_class() -> Any:
-    """Resolve the cascor ``CandidateUnit`` class from the juniper-cascor-core package.
+    """Resolve the cascor ``CandidateUnit`` class from the juniper-cascor-model package.
 
-    CW-05 Approach A: the candidate-training core now ships as the ``juniper-cascor-core``
+    CW-05 Approach A: the candidate-training core now ships as the ``juniper-cascor-model``
     dependency (which provides the top-level ``candidate_unit`` package), so this is a normal
     package import -- no ``--cascor-path`` flag or cascor source-tree mount is needed. Kept as
     a single helper so the (lazy, torch-pulling) import stays in one place.
@@ -43,7 +43,7 @@ def _get_candidate_unit_class() -> Any:
     try:
         from candidate_unit.candidate_unit import CandidateUnit
     except ImportError as exc:
-        raise ImportError("CandidateUnit is not importable -- the 'juniper-cascor-core' dependency is missing " "or broken (it provides the top-level 'candidate_unit' package). Install or repair " f"juniper-cascor-core. Original error: {exc}") from exc
+        raise ImportError("CandidateUnit is not importable -- the 'juniper-cascor-model' dependency is missing " "or broken (it provides the top-level 'candidate_unit' package). Install or repair " f"juniper-cascor-model. Original error: {exc}") from exc
     return CandidateUnit
 
 
@@ -195,7 +195,7 @@ def execute_training_task(
 def _get_activation_function(name: str):
     """Resolve an activation name to the single callable ``CandidateUnit`` expects.
 
-    Uses juniper-cascor-core's canonical ``ActivationWithDerivative.ACTIVATION_MAP`` (both
+    Uses juniper-cascor-model's canonical ``ActivationWithDerivative.ACTIVATION_MAP`` (both
     TitleCase nn-module and lowercase functional variants) so the worker resolves exactly the
     activations cascor dispatches -- fixing the ``Unknown activation 'Tanh'`` fallback to a
     different activation (CW-05 gap #4). ``CandidateUnit`` wraps this callable in
@@ -203,7 +203,7 @@ def _get_activation_function(name: str):
     hand-maintains a partial ``(fn, derivative)`` map -- which also mismatched the current
     ``CandidateUnit`` API (it takes a callable, not a tuple).
 
-    CW-08: ``candidate_unit`` (juniper-cascor-core) pulls torch, so this stays lazy.
+    CW-08: ``candidate_unit`` (juniper-cascor-model) pulls torch, so this stays lazy.
     """
     from utils.activation import ActivationWithDerivative
 
