@@ -584,7 +584,15 @@ jobs:
           # PYSEC-2025-210  torch.profiler.profile — DoS via missing profiler.stop()
           # PYSEC-2026-139  pt2 Loading Handler — deserialization (local; PR open upstream)
           #
-          # Tracking note: when removing IDs, also delete from
+          # 2026-06-14: pip-audit's advisory DB re-keyed some of these from their PYSEC ids
+          # to their CVE aliases, so the PYSEC-only ignores stopped matching and CI went red
+          # on CVE-2025-3000 (torch.jit.script). The 4 advisories below remain UNFIXED at
+          # every torch release — the only ones reportable against latest torch — so we now
+          # suppress them by BOTH ids (PYSEC + CVE) to stay re-key-proof:
+          #   PYSEC-2025-189 = CVE-2025-2148    PYSEC-2025-190 = CVE-2025-2149
+          #   PYSEC-2025-192 = CVE-2025-2998    PYSEC-2025-194 = CVE-2025-3000
+          #
+          # Tracking note: when adding/removing IDs, also update
           # juniper-cascor's analogous block (kept in sync).
           # ──────────────────────────────────────────────────────────────────────
           pip-audit -r reports/security/requirements.txt --strict --desc on \
@@ -599,6 +607,10 @@ jobs:
             --ignore-vuln PYSEC-2025-197 \
             --ignore-vuln PYSEC-2025-210 \
             --ignore-vuln PYSEC-2026-139 \
+            --ignore-vuln CVE-2025-2148 \
+            --ignore-vuln CVE-2025-2149 \
+            --ignore-vuln CVE-2025-2998 \
+            --ignore-vuln CVE-2025-3000 \
             || (echo "::error::Critical/High vulnerabilities found in dependencies" && exit 1)
 
       - name: Upload Security Reports
