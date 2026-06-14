@@ -3,7 +3,7 @@
 These drive the REAL ``execute_training_task`` with a cascor-style task to lock in the three
 worker-side fixes that let the dual-path remote tier actually execute candidates:
 
-  - ``candidate_unit`` imports from the ``juniper-cascor-core`` package (no ``--cascor-path``
+  - ``candidate_unit`` imports from the ``juniper-cascor-model`` package (no ``--cascor-path``
     / cascor source mount);
   - activation resolves the TitleCase names cascor dispatches (e.g. ``'Tanh'``) via the core
     ``ACTIVATION_MAP``, instead of silently falling back to a different activation (gap #4);
@@ -11,16 +11,16 @@ worker-side fixes that let the dual-path remote tier actually execute candidates
     (``random_max_value`` / ``sequence_max_value``) do not crash candidate training with
     ``'float' object cannot be interpreted as an integer`` (gap #5).
 
-Skipped when ``juniper-cascor-core`` (the top-level ``candidate_unit`` package) is not
+Skipped when ``juniper-cascor-model`` (the top-level ``candidate_unit`` package) is not
 importable, so worker CI stays green until the package is published; run locally with
-``juniper-cascor-core`` on the path to validate end-to-end.
+``juniper-cascor-model`` on the path to validate end-to-end.
 """
 
 import numpy as np
 import pytest
 
 pytest.importorskip("torch")
-pytest.importorskip("candidate_unit.candidate_unit", reason="juniper-cascor-core not installed")
+pytest.importorskip("candidate_unit.candidate_unit", reason="juniper-cascor-model not installed")
 
 from juniper_cascor_worker.task_executor import _get_activation_function, execute_training_task  # noqa: E402
 

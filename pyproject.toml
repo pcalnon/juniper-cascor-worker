@@ -63,7 +63,7 @@ dependencies = [
     # shipped as a package so the worker no longer needs the cascor source tree on
     # sys.path via --cascor-path. Provides the top-level ``candidate_unit`` import.
     # Pulls torch/numpy (already direct deps) + PyYAML.
-    "juniper-cascor-core>=0.1.0",
+    "juniper-cascor-model>=0.1.0",
 ]
 
 [project.optional-dependencies]
