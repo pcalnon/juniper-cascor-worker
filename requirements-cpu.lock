@@ -6,7 +6,7 @@
 # CUDA wheels that the GPU lock would otherwise pull in transitively.
 #
 # Regeneration command:
-#   echo "torch==2.9.1+cpu" > /tmp/torch-cpu-override
+#   echo "torch==2.12.0+cpu" > /tmp/torch-cpu-override
 #   uv pip compile pyproject.toml \
 #     --extra-index-url https://download.pytorch.org/whl/cpu \
 #     --no-emit-package torch \
@@ -29,6 +29,8 @@ fsspec==2026.4.0
     # via torch
 jinja2==3.1.6
     # via torch
+juniper-cascor-model==0.1.0
+    # via juniper-cascor-worker (pyproject.toml)
 juniper-cascor-protocol==0.1.0
     # via juniper-cascor-worker (pyproject.toml)
 juniper-config-tools==0.1.0
@@ -42,11 +44,14 @@ networkx==3.6.1
 numpy==2.4.4
     # via
     #   juniper-cascor-worker (pyproject.toml)
+    #   juniper-cascor-model
     #   juniper-cascor-protocol
 pydantic==2.13.4
     # via juniper-cascor-protocol
 pydantic-core==2.46.4
     # via pydantic
+pyyaml==6.0.3
+    # via juniper-cascor-model
 setuptools==70.2.0
     # via torch
 sympy==1.14.0
