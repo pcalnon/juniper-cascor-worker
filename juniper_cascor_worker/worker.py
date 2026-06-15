@@ -136,6 +136,8 @@ class CascorWorkerAgent:
             readiness_tick=self._readiness_tick,
             worker_id_provider=lambda: self.worker_id if self._registered else None,
             version=_resolve_version(),
+            git_sha=_resolve_git_sha(),
+            build_date=_resolve_build_date(),
             host=self.config.health_bind,
             port=self.config.health_port,
         )
@@ -554,6 +556,27 @@ def _resolve_version() -> str:
             return "0.0.0+unknown"
     except Exception:  # noqa: BLE001
         return "0.0.0+unknown"
+
+
+def _resolve_git_sha() -> str | None:
+    """Return the source git SHA baked into the image at build time, or None.
+
+    Read from the ``JUNIPER_CASCOR_WORKER_GIT_SHA`` env var the Dockerfile sets
+    from a build-arg (build provenance — juniper-ml
+    notes/BUILD_PROVENANCE_DESIGN_2026-06-14.md). None when running outside a
+    provenance-stamped image (local dev / bare build leaves it empty).
+    Surfaced on ``/v1/health`` so stale-image drift is detectable. Never raises.
+    """
+    import os
+
+    return os.environ.get("JUNIPER_CASCOR_WORKER_GIT_SHA") or None
+
+
+def _resolve_build_date() -> str | None:
+    """Return the ISO-8601 image build timestamp, or None. See :func:`_resolve_git_sha`."""
+    import os
+
+    return os.environ.get("JUNIPER_CASCOR_WORKER_BUILD_DATE") or None
 
 
 def _parse_json(raw: str) -> dict[str, Any] | None:

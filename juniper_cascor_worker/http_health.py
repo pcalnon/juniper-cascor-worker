@@ -78,11 +78,19 @@ class HealthServer:
         version: str,
         host: str,
         port: int,
+        git_sha: str | None = None,
+        build_date: str | None = None,
     ) -> None:
         self._liveness_tick = liveness_tick
         self._readiness_tick = readiness_tick
         self._worker_id_provider = worker_id_provider
         self._version = version
+        # Build provenance (juniper-ml notes/BUILD_PROVENANCE_DESIGN_2026-06-14.md):
+        # source git SHA + ISO-8601 build date injected via the image's env
+        # vars. None outside a provenance-stamped image. Surfaced on
+        # /v1/health so stale-image drift is detectable.
+        self._git_sha = git_sha
+        self._build_date = build_date
         self._host = host
         self._port = port
         self._server: asyncio.base_events.Server | None = None
@@ -182,7 +190,17 @@ class HealthServer:
 
     async def _dispatch(self, writer: asyncio.StreamWriter, path: str) -> None:
         if path == "/v1/health":
-            await self._write_json(writer, 200, {"status": "ok", "worker_id": self._worker_id_provider(), "version": self._version})
+            await self._write_json(
+                writer,
+                200,
+                {
+                    "status": "ok",
+                    "worker_id": self._worker_id_provider(),
+                    "version": self._version,
+                    "git_sha": self._git_sha,
+                    "build_date": self._build_date,
+                },
+            )
             return
         if path == "/v1/health/live":
             await self._handle_liveness(writer)

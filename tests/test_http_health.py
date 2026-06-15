@@ -69,7 +69,7 @@ async def server_factory():
     """Yield a function that builds + starts a HealthServer; tears down after."""
     started: list[HealthServer] = []
 
-    async def _make(*, liveness_tick=lambda: None, readiness_tick=lambda: None, worker_id="w1") -> Tuple[HealthServer, int]:
+    async def _make(*, liveness_tick=lambda: None, readiness_tick=lambda: None, worker_id="w1", git_sha=None, build_date=None) -> Tuple[HealthServer, int]:
         port = _free_port()
         srv = HealthServer(
             liveness_tick=liveness_tick,
@@ -78,6 +78,8 @@ async def server_factory():
             version="1.2.3",
             host="127.0.0.1",
             port=port,
+            git_sha=git_sha,
+            build_date=build_date,
         )
         await srv.start()
         started.append(srv)
@@ -98,6 +100,21 @@ async def test_health_endpoint_returns_200_with_worker_id(server_factory):
     assert payload["status"] == "ok"
     assert payload["worker_id"] == "w1"
     assert payload["version"] == "1.2.3"
+    # Build provenance absent (built bare / local) → fields present but null.
+    assert payload["git_sha"] is None
+    assert payload["build_date"] is None
+
+
+@pytest.mark.asyncio
+async def test_health_endpoint_includes_build_provenance(server_factory):
+    """When the image baked a git SHA + build date into the worker's env, the
+    /v1/health body surfaces them (build provenance / stale-image detection)."""
+    _srv, port = await server_factory(git_sha="abc1234", build_date="2026-06-14T00:00:00Z")
+    status, _h, body = await _http_get("127.0.0.1", port, "/v1/health")
+    assert status == 200
+    payload = json.loads(body)
+    assert payload["git_sha"] == "abc1234"
+    assert payload["build_date"] == "2026-06-14T00:00:00Z"
 
 
 @pytest.mark.asyncio
