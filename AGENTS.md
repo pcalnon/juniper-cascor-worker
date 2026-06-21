@@ -442,6 +442,17 @@ When the cascor server changes the wire protocol:
 | `tests/test_task_executor.py` | Task execution with mocked cascor imports |
 | `tests/test_ws_connection.py` | WebSocket connect, retry, TLS, binary frames |
 
+### Coverage
+
+Reproduce the CI coverage gate locally (full suite):
+
+```bash
+make coverage                 # convenience wrapper
+bash util/run_coverage.bash   # source of truth (mirrors .github/workflows/ci.yml)
+```
+
+Gate: 80% aggregate (override with `COVERAGE_FAIL_UNDER=<n>`). The script runs the full suite by design so the percentage matches CI; for a narrower run use plain `pytest`.
+
 ---
 
 ## CI/CD
