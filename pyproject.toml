@@ -116,10 +116,12 @@ known_first_party = ["juniper_cascor_worker"]
 minversion = "6.0"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+asyncio_mode = "auto"
 addopts = [
     "-ra",
     "-q",
     "--strict-markers",
+    "--strict-config",
     # Block pytest plugins auto-discovered from the active conda env but
     # unused by this project. dash.testing.plugin transitively imports psutil;
     # if the env has a non-FT psutil wheel (abi3 landed in python3.14t),
