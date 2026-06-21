@@ -6,7 +6,7 @@
 **License**: MIT License
 **Version**: 0.4.0
 **Python**: >=3.11 (supports 3.11, 3.12, 3.13, 3.14)
-**Last Updated**: 2026-05-23
+**Last Updated**: 2026-06-21
 
 ---
 
@@ -441,6 +441,17 @@ When the cascor server changes the wire protocol:
 | `tests/test_worker_agent.py` | CascorWorkerAgent registration, heartbeat, task handling, binary framing |
 | `tests/test_task_executor.py` | Task execution with mocked cascor imports |
 | `tests/test_ws_connection.py` | WebSocket connect, retry, TLS, binary frames |
+
+### Coverage
+
+Reproduce the CI coverage gate locally (full suite):
+
+```bash
+make coverage                 # convenience wrapper
+bash util/run_coverage.bash   # source of truth (mirrors .github/workflows/ci.yml)
+```
+
+Gate: 80% aggregate (override with `COVERAGE_FAIL_UNDER=<n>`). The script runs the full suite by design so the percentage matches CI; for a narrower run use plain `pytest`.
 
 ---
 
