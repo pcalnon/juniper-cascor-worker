@@ -10,7 +10,7 @@ cuda-toolkit==13.0.2
     # via torch
 filelock==3.29.4
     # via torch
-fsspec==2026.4.0
+fsspec==2026.6.0
     # via torch
 jinja2==3.1.6
     # via torch
@@ -82,7 +82,7 @@ setuptools==81.0.0
     # via torch
 sympy==1.14.0
     # via torch
-triton==3.7.0
+triton==3.7.1
     # via torch
 typing-extensions==4.15.0
     # via
