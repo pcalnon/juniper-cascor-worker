@@ -40,7 +40,9 @@ classifiers = [
 
 dependencies = [
     "numpy>=1.24.0",
-    "torch>=2.0.0",
+    # SEC-F17 (CVE-2025-3001, lstm_cell memory corruption, fixed 2.10.0):
+    # floor raised 2.0.0 -> 2.10.0 to exclude the vulnerable 2.0-2.9 range.
+    "torch>=2.10.0",
     "websockets>=11.0",
     # METRICS-MON R2.2.6 / seed-05: single-sources the WorkerMessageType
     # StrEnum + BinaryFrame numpy codec used on /ws/v1/workers. Worker
