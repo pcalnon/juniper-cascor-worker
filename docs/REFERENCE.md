@@ -247,8 +247,19 @@ from juniper_cascor_worker import (
 ```bash
 pytest tests/ -v                    # All tests
 pytest tests/ -m unit -v            # Unit tests only
-pytest tests/ --cov=juniper_cascor_worker --cov-report=term-missing --cov-fail-under=80
+make coverage                        # Full CI coverage gates
+bash util/run_coverage.bash          # Same as make coverage
+pytest tests/ --cov=juniper_cascor_worker --cov-report=term-missing --cov-fail-under=80  # Quick aggregate check
 ```
+
+### Coverage Gates
+
+CI coverage enforcement is additive:
+
+- `coverage report --fail-under=${COVERAGE_FAIL_UNDER}` checks aggregate package coverage. The default threshold is 80%.
+- `juniper-coverage-gap-map --coverage-json reports/coverage.json --enforce` checks `reports/coverage.json` for at least 90% statement coverage in each source file and at least 95% statement-weighted pooled coverage in each packaged sub-module.
+
+`make coverage` and `bash util/run_coverage.bash` run the full suite because narrowed selections do not reproduce CI percentages. The helper writes `reports/coverage.json` for the per-file gate. Locally, the per-file gate runs only when `juniper-coverage-gap-map` from `juniper-ci-tools>=0.6.0,<0.7.0` is installed; CI installs the tool and fails the `unit-tests` job if the gate reports gaps.
 
 ### Test Files
 

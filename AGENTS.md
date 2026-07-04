@@ -21,7 +21,11 @@ pip install -e ".[dev]"
 # Run all tests
 pytest tests/ -v
 
-# Run with coverage (80% threshold enforced)
+# Reproduce CI coverage gates locally (aggregate + per-file)
+make coverage
+bash util/run_coverage.bash
+
+# Quick aggregate-only coverage check
 pytest tests/ --cov=juniper_cascor_worker --cov-report=term-missing --cov-fail-under=80
 
 # Type checking
@@ -420,7 +424,7 @@ When the cascor server changes the wire protocol:
 
 - **Framework**: pytest >=7.0.0
 - **Async**: pytest-asyncio >=0.21.0
-- **Coverage**: pytest-cov; `fail_under=80` enforced
+- **Coverage**: pytest-cov aggregate `fail_under=80` plus per-file/pool gate in CI
 - **Timeout**: 30 seconds per test
 
 ### Test Markers
@@ -444,14 +448,19 @@ When the cascor server changes the wire protocol:
 
 ### Coverage
 
-Reproduce the CI coverage gate locally (full suite):
+Reproduce the CI coverage gates locally (full suite):
 
 ```bash
 make coverage                 # convenience wrapper
 bash util/run_coverage.bash   # source of truth (mirrors .github/workflows/ci.yml)
 ```
 
-Gate: 80% aggregate (override with `COVERAGE_FAIL_UNDER=<n>`). The script runs the full suite by design so the percentage matches CI; for a narrower run use plain `pytest`.
+Gates:
+
+- **Aggregate**: 80% package coverage by default (`coverage report --fail-under=${COVERAGE_FAIL_UNDER}`); override with `COVERAGE_FAIL_UNDER=<n>`.
+- **Per-file / pooled statement coverage**: CI installs `juniper-ci-tools>=0.6.0,<0.7.0` and runs `juniper-coverage-gap-map --coverage-json reports/coverage.json --enforce`, failing when any source file is below 90% statement coverage or any packaged sub-module is below 95% statement-weighted pooled coverage.
+
+`util/run_coverage.bash` writes `reports/coverage.json` and runs both gates locally when `juniper-coverage-gap-map` is installed. If the tool is missing, the helper prints the install hint and skips only the per-file gate; CI always treats the per-file gate as blocking. The script runs the full suite by design so percentages match CI; for a narrower debug loop use plain `pytest`.
 
 ---
 
@@ -465,7 +474,7 @@ Gate: 80% aggregate (override with `COVERAGE_FAIL_UNDER=<n>`). The script runs t
 |-----|--------|-------------|
 | **pre-commit** | 3.11, 3.12, 3.13 | Run all pre-commit hooks (parallel matrix) |
 | **docs** | 3.13 | Run `check_doc_links.py` for internal link validation |
-| **unit-tests** | 3.13 | Unit tests with coverage enforcement (>=80%) |
+| **unit-tests** | 3.13 | Unit tests with aggregate and per-file coverage enforcement |
 | **build** | 3.13 | Build wheel + sdist, verify package metadata |
 | **dependency-docs** | 3.13 | Generate dependency documentation |
 | **security** | 3.13 | Gitleaks, Bandit SARIF, pip-audit |
