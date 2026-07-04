@@ -188,3 +188,52 @@ class TestTensorConversion:
         for name, arr in tensor_dict.items():
             assert isinstance(arr, np.ndarray), f"Tensor '{name}' is not a numpy array"
             assert arr.dtype == np.float32, f"Tensor '{name}' dtype is {arr.dtype}, expected float32"
+
+
+# ---------------------------------------------------------------------------
+# Result coercion + activation resolution.
+# Per-file coverage rollout C-5 (juniper-ml
+# notes/JUNIPER_ECOSYSTEM_PER_FILE_COVERAGE_ROLLOUT_SCOPING_2026-06-30.md):
+# cover the tensor->list correlation coercion branch and the
+# _get_activation_function lowercase-retry / unknown-name fallback so
+# task_executor.py clears the ratified per-file statement bar.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestResultCoercion:
+    def test_tensor_all_correlations_coerced_to_float_list(self):
+        """A tensor ``all_correlations`` is coerced to a plain float list for
+        JSON serialization (covers the isinstance(...) branch)."""
+        result = _make_mock_training_result()
+        result.all_correlations = torch.tensor([0.1, 0.5, 0.85])
+        mock_cls, _inst = _make_mock_candidate_unit(training_result=result)
+        mock_module = MagicMock()
+        mock_module.CandidateUnit = mock_cls
+
+        with patch.dict(sys.modules, {"candidate_unit": MagicMock(), "candidate_unit.candidate_unit": mock_module}):
+            result_dict, _tensor_dict = execute_training_task(_make_candidate_data(), _make_training_params(), _make_tensors())
+
+        assert result_dict["all_correlations"] == pytest.approx([0.1, 0.5, 0.85])
+        assert all(isinstance(c, float) for c in result_dict["all_correlations"])
+
+
+@pytest.mark.unit
+class TestActivationResolution:
+    def test_known_activation_resolves(self):
+        """An exact-key activation name resolves to a callable."""
+        from juniper_cascor_worker.task_executor import _get_activation_function
+
+        assert callable(_get_activation_function("sigmoid"))
+
+    def test_uppercase_activation_resolves_via_lowercase_retry(self):
+        """A non-exact-key name resolves through the lowercase fallback branch."""
+        from juniper_cascor_worker.task_executor import _get_activation_function
+
+        assert callable(_get_activation_function("SIGMOID"))
+
+    def test_unknown_activation_falls_back_to_default(self):
+        """An unrecognized activation warns and falls back to the default callable."""
+        from juniper_cascor_worker.task_executor import _get_activation_function
+
+        assert callable(_get_activation_function("NoSuchActivationXYZ"))
