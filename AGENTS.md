@@ -21,7 +21,7 @@ pip install -e ".[dev]"
 # Run all tests
 pytest tests/ -v
 
-# Reproduce the CI coverage gate locally (aggregate)
+# Reproduce CI coverage gates locally (aggregate + per-file)
 make coverage
 bash util/run_coverage.bash
 
@@ -437,7 +437,7 @@ When the cascor server changes the wire protocol:
 
 - **Framework**: pytest >=7.0.0
 - **Async**: pytest-asyncio >=0.21.0
-- **Coverage**: pytest-cov aggregate `fail_under=80`
+- **Coverage**: pytest-cov aggregate `fail_under=80` plus per-file/pool gate in CI
 - **Timeout**: 30 seconds per test
 
 ### Test Markers
@@ -461,18 +461,19 @@ When the cascor server changes the wire protocol:
 
 ### Coverage
 
-Reproduce the CI coverage gate locally (full suite):
+Reproduce the CI coverage gates locally (full suite):
 
 ```bash
 make coverage                 # convenience wrapper
 bash util/run_coverage.bash   # source of truth (mirrors .github/workflows/ci.yml)
 ```
 
-Gate:
+Gates:
 
 - **Aggregate**: 80% package coverage by default (`coverage report --fail-under=${COVERAGE_FAIL_UNDER}`); override with `COVERAGE_FAIL_UNDER=<n>`.
+- **Per-file / pooled statement coverage**: CI installs `juniper-ci-tools>=0.6.0,<0.7.0` and runs `juniper-coverage-gap-map --coverage-json reports/coverage.json --enforce`, failing when any source file is below 90% statement coverage or any packaged sub-module is below 95% statement-weighted pooled coverage.
 
-`util/run_coverage.bash` runs the full suite and the aggregate coverage report by design so the percentage matches CI. It does not reproduce CI artifacts such as JUnit XML, coverage XML, or HTML coverage output; use plain `pytest` for a narrower debug loop.
+`util/run_coverage.bash` writes `reports/coverage.json` and runs both gates locally when `juniper-coverage-gap-map` is installed. If the tool is missing, the helper prints the install hint and skips only the per-file gate; CI always treats the per-file gate as blocking. The script runs the full suite by design so percentages match CI; for a narrower debug loop use plain `pytest`.
 
 ---
 

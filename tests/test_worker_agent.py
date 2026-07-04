@@ -232,6 +232,66 @@ class TestHandleTaskAssign:
         assert agent._last_task_duration_seconds == 0.25
         assert list(agent._recent_task_durations_seconds) == [0.25]
 
+    @pytest.mark.asyncio
+    async def test_handle_task_assign_relay_training_failure(self):
+        """Executor soft failures are reported to the server without binary frames."""
+        config = _make_ws_config()
+        agent = CascorWorkerAgent(config)
+
+        encoded_input = _encode_binary_frame(np.zeros((2, 3), dtype=np.float32))
+        encoded_error = _encode_binary_frame(np.zeros((2, 1), dtype=np.float32))
+
+        mock_conn = AsyncMock()
+        mock_conn.receive_bytes.side_effect = [encoded_input, encoded_error]
+        agent._connection = mock_conn
+
+        task_msg = {
+            "type": "task_assign",
+            "task_id": "task-failed",
+            "candidate_index": 7,
+            "candidate_data": {"input_size": 3, "activation_name": "sigmoid"},
+            "training_params": {"epochs": 100},
+            "tensor_manifest": {"candidate_input": {}, "residual_error": {}},
+        }
+
+        mock_result_dict = {
+            "candidate_id": 7,
+            "candidate_uuid": "uuid-failed",
+            "correlation": 0.0,
+            "success": False,
+            "epochs_completed": 0,
+            "activation_name": "sigmoid",
+            "all_correlations": [],
+            "numerator": 0.0,
+            "denominator": 0.0,
+            "best_corr_idx": -1,
+            "error_message": "CUDA out of memory",
+        }
+
+        fake_time = MagicMock()
+        fake_time.monotonic.side_effect = [20.0, 20.5, 20.5]
+        fake_time.time.return_value = 4321.0
+        with patch("juniper_cascor_worker.worker.asyncio.to_thread", new_callable=AsyncMock, return_value=(mock_result_dict, {})), patch("juniper_cascor_worker.worker.time", fake_time):
+            await agent._handle_task_assign(task_msg)
+
+        mock_conn.send_json.assert_awaited_once()
+        result_msg = mock_conn.send_json.await_args[0][0]
+        assert result_msg["type"] == "task_result"
+        assert result_msg["task_id"] == "task-failed"
+        assert result_msg["candidate_id"] == 7
+        assert result_msg["candidate_uuid"] == "uuid-failed"
+        assert result_msg["success"] is False
+        assert result_msg["error_message"] == "CUDA out of memory"
+        assert result_msg["tensor_manifest"] == {}
+        mock_conn.send_bytes.assert_not_awaited()
+
+        assert agent._in_flight_tasks == 0
+        assert agent._tasks_completed == 0
+        assert agent._tasks_failed == 1
+        assert agent._last_task_completed_at == 4321.0
+        assert agent._last_task_duration_seconds == 0.5
+        assert list(agent._recent_task_durations_seconds) == [0.5]
+
 
 @pytest.mark.unit
 class TestStop:

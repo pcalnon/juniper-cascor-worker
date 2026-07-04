@@ -355,3 +355,76 @@ class TestConnectWithRetryStopEvent:
             await conn.connect_with_retry(stop_event=stop)
 
         assert conn.connected is True
+
+
+@pytest.mark.unit
+class TestErrorPaths:
+    """Receive / close / TLS-context error branches.
+
+    Per-file coverage rollout C-5 (juniper-ml
+    notes/JUNIPER_ECOSYSTEM_PER_FILE_COVERAGE_ROLLOUT_SCOPING_2026-06-30.md):
+    exercise the ``receive()``-when-disconnected guard, the ConnectionClosed
+    unwind, the best-effort ``close()`` swallow, and the mTLS certificate-load
+    branches so ws_connection.py clears the ratified per-file statement bar.
+    """
+
+    @pytest.mark.asyncio
+    async def test_receive_when_disconnected_raises(self):
+        """receive() with no live socket -> WorkerConnectionError('Not connected')."""
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers")
+        with pytest.raises(WorkerConnectionError, match="Not connected"):
+            await conn.receive()
+
+    @pytest.mark.asyncio
+    async def test_receive_connection_closed_clears_socket(self):
+        """A ConnectionClosed from recv() -> WorkerConnectionError; the socket
+        handle is cleared so the caller can reconnect."""
+        import websockets
+
+        mock_ws = _make_mock_ws()
+        mock_ws.recv.side_effect = websockets.ConnectionClosed(None, None)
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers")
+        conn._ws = mock_ws
+
+        with pytest.raises(WorkerConnectionError, match="Connection closed"):
+            await conn.receive()
+        assert conn._ws is None
+
+    @pytest.mark.asyncio
+    async def test_close_swallows_underlying_error(self):
+        """close() must never propagate an error from the underlying socket."""
+        mock_ws = _make_mock_ws()
+        mock_ws.close.side_effect = RuntimeError("already gone")
+        conn = WorkerConnection("ws://localhost:8200/ws/v1/workers")
+        conn._ws = mock_ws
+
+        await conn.close()  # must not raise
+        assert conn._ws is None
+
+    def test_ssl_context_loads_custom_ca(self):
+        """wss:// + tls_ca -> load_verify_locations is invoked with the CA path."""
+        conn = WorkerConnection("wss://secure.example.com/ws/v1/workers", tls_ca="/etc/certs/ca.pem")
+
+        with patch("juniper_cascor_worker.ws_connection.ssl.create_default_context") as mock_create:
+            mock_ctx = MagicMock(spec=ssl.SSLContext)
+            mock_create.return_value = mock_ctx
+            result = conn._build_ssl_context()
+
+        assert result is mock_ctx
+        mock_ctx.load_verify_locations.assert_called_once_with("/etc/certs/ca.pem")
+
+    def test_ssl_context_loads_client_cert_chain(self):
+        """wss:// + tls_cert/tls_key -> load_cert_chain is invoked (mTLS)."""
+        conn = WorkerConnection(
+            "wss://secure.example.com/ws/v1/workers",
+            tls_cert="/etc/certs/client.pem",
+            tls_key="/etc/certs/client.key",
+        )
+
+        with patch("juniper_cascor_worker.ws_connection.ssl.create_default_context") as mock_create:
+            mock_ctx = MagicMock(spec=ssl.SSLContext)
+            mock_create.return_value = mock_ctx
+            result = conn._build_ssl_context()
+
+        assert result is mock_ctx
+        mock_ctx.load_cert_chain.assert_called_once_with(certfile="/etc/certs/client.pem", keyfile="/etc/certs/client.key")
