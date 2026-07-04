@@ -213,12 +213,13 @@ Workflow actions are SHA-pinned with adjacent version comments. For GitHub Actio
 `ci.yml` aggregates these jobs in `required-checks`:
 
 1. `pre-commit` on Python 3.12, 3.13, and 3.14.
-2. `docs`, which runs `python scripts/check_doc_links.py --exclude templates --exclude history`.
+2. `docs`, which installs `juniper-doc-tools` / `juniper-ci-tools`, runs `juniper-check-doc-links` with the excludes in `ci.yml` and `--cross-repo skip`, lints workflow script paths, and checks AGENTS.md metadata.
 3. `unit-tests` on Linux for Python 3.12, 3.13, and 3.14 plus macOS Python 3.12.
 4. `integration-tests` on Python 3.12, 3.13, and 3.14. Failures are reported as warnings during the shakedown cycle.
 5. `build`, which builds wheel and sdist artifacts and runs `twine check`.
-6. `dependency-docs`, which runs `bash scripts/generate_dep_docs.sh` and uploads generated dependency files.
+6. `dependency-docs`, which runs `juniper-generate-dep-docs` and uploads generated dependency files.
 7. `security`, which runs Gitleaks, Bandit SARIF upload, and `pip-audit`.
+8. `lockfile-check`, which verifies committed lockfiles still satisfy `pyproject.toml`.
 
 When a PR fails the quality gate, inspect the failed upstream job first; `required-checks` usually only reports the aggregate failure.
 

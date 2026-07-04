@@ -252,6 +252,13 @@ bash util/run_coverage.bash          # Same as make coverage
 pytest tests/ --cov=juniper_cascor_worker --cov-report=term-missing --cov-fail-under=80  # Quick aggregate check
 ```
 
+### Coverage Gate
+
+CI coverage enforcement is aggregate:
+
+- `coverage report --fail-under=${COVERAGE_FAIL_UNDER}` checks package coverage. The default threshold is 80%.
+
+`make coverage` and `bash util/run_coverage.bash` run the full suite because narrowed selections do not reproduce CI percentages. CI also produces JUnit, XML coverage, and HTML coverage artifacts; the local helper focuses on the aggregate gate developers need before pushing.
 ### Coverage Gates
 
 CI coverage enforcement is additive:
