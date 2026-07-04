@@ -3,7 +3,7 @@
 **Status**: Draft — design discussion before implementation
 **Author**: Paul Calnon
 **Date**: 2026-05-22
-**Roadmap reference**: [juniper-ml v7 roadmap CFG-06 (§20)](https://github.com/pcalnon/juniper-ml/blob/main/notes/JUNIPER_OUTSTANDING_DEVELOPMENT_ITEMS_V7_IMPLEMENTATION_ROADMAP.md#cfg-06-cascor_-env-prefix-inconsistent-with-juniper_-convention)
+**Roadmap reference**: [juniper-ml v7 roadmap CFG-06 (§20)](https://github.com/pcalnon/juniper-ml/blob/main/notes/JUNIPER_2026-05-25_JUNIPER-ECOSYSTEM_OUTSTANDING-DEVELOPMENT-ITEMS-V7-IMPLEMENTATION-ROADMAP.md#cfg-06-cascor_-env-prefix-inconsistent-with-juniper_-convention)
 **Related shipped patterns**: CFG-03 (juniper-cascor PR #287), CFG-05 (juniper-cascor PR #289), CFG-04 (juniper-cascor PR #297), CFG-16 (juniper-canopy PR #312)
 
 ---
@@ -293,13 +293,13 @@ The implementation PR (separate from this design doc PR) closes CFG-06 when:
 - [ ] Source-level scope guard passes (no raw `os.getenv("CASCOR_*")` in `config.py`).
 - [ ] CHANGELOG entry under `## [Unreleased] → ### Changed`.
 - [ ] AGENTS.md env-var section updated with both names + deprecation note.
-- [ ] `juniper-ml/notes/JUNIPER_OUTSTANDING_DEVELOPMENT_ITEMS_V7_IMPLEMENTATION_ROADMAP.md` §2.2 status pass updated to mark CFG-06 ✅ shipped.
+- [ ] `juniper-ml/notes/JUNIPER_2026-05-25_JUNIPER-ECOSYSTEM_OUTSTANDING-DEVELOPMENT-ITEMS-V7-IMPLEMENTATION-ROADMAP.md` §2.2 status pass updated to mark CFG-06 ✅ shipped.
 
 The two follow-up PRs (deploy + docs sweep) are not part of CFG-06's acceptance — they're tracked separately.
 
 ## 12. References
 
-- v7 roadmap CFG-06 entry: [`notes/JUNIPER_OUTSTANDING_DEVELOPMENT_ITEMS_V7_IMPLEMENTATION_ROADMAP.md:13699`](https://github.com/pcalnon/juniper-ml/blob/main/notes/JUNIPER_OUTSTANDING_DEVELOPMENT_ITEMS_V7_IMPLEMENTATION_ROADMAP.md#cfg-06-cascor_-env-prefix-inconsistent-with-juniper_-convention) (juniper-ml)
+- v7 roadmap CFG-06 entry: [`notes/JUNIPER_OUTSTANDING_DEVELOPMENT_ITEMS_V7_IMPLEMENTATION_ROADMAP.md:13699`](https://github.com/pcalnon/juniper-ml/blob/main/notes/JUNIPER_2026-05-25_JUNIPER-ECOSYSTEM_OUTSTANDING-DEVELOPMENT-ITEMS-V7-IMPLEMENTATION-ROADMAP.md#cfg-06-cascor_-env-prefix-inconsistent-with-juniper_-convention) (juniper-ml)
 - §2.2 status pass (in flight as juniper-ml#317).
 - Sibling-repo precedent — helper-based deprecation:
   - juniper-cascor PR #287 (CFG-03 — `SENTRY_SDK_DSN` → `JUNIPER_CASCOR_SENTRY_DSN`)
