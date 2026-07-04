@@ -14,7 +14,7 @@
 | `pip install juniper-cascor-worker` | Install from PyPI |
 | `pytest tests/ -v` | Run all tests |
 | `pytest tests/ -m unit -v` | Run unit tests only |
-| `make coverage` / `bash util/run_coverage.bash` | Reproduce the full CI coverage gates locally |
+| `make coverage` / `bash util/run_coverage.bash` | Reproduce the CI aggregate coverage gate locally |
 | `pytest tests/ --cov=juniper_cascor_worker --cov-report=term-missing --cov-fail-under=80` | Quick aggregate coverage check |
 | `mypy juniper_cascor_worker --ignore-missing-imports` | Type checking |
 | `flake8 juniper_cascor_worker --max-line-length=120` | Linting |
@@ -213,23 +213,23 @@ Workflow actions are SHA-pinned with adjacent version comments. For GitHub Actio
 `ci.yml` aggregates these jobs in `required-checks`:
 
 1. `pre-commit` on Python 3.12, 3.13, and 3.14.
-2. `docs`, which runs `python scripts/check_doc_links.py --exclude templates --exclude history`.
+2. `docs`, which installs `juniper-doc-tools` / `juniper-ci-tools`, runs `juniper-check-doc-links` with the excludes in `ci.yml` and `--cross-repo skip`, lints workflow script paths, and checks AGENTS.md metadata.
 3. `unit-tests` on Linux for Python 3.12, 3.13, and 3.14 plus macOS Python 3.12.
 4. `integration-tests` on Python 3.12, 3.13, and 3.14. Failures are reported as warnings during the shakedown cycle.
 5. `build`, which builds wheel and sdist artifacts and runs `twine check`.
-6. `dependency-docs`, which runs `bash scripts/generate_dep_docs.sh` and uploads generated dependency files.
+6. `dependency-docs`, which runs `juniper-generate-dep-docs` and uploads generated dependency files.
 7. `security`, which runs Gitleaks, Bandit SARIF upload, and `pip-audit`.
+8. `lockfile-check`, which verifies committed lockfiles still satisfy `pyproject.toml`.
 
 When a PR fails the quality gate, inspect the failed upstream job first; `required-checks` usually only reports the aggregate failure.
 
-### Coverage Gates
+### Coverage Gate
 
-The `unit-tests` job enforces two coverage gates:
+The `unit-tests` job enforces the aggregate package coverage gate:
 
-1. **Aggregate package coverage**: `python -m coverage report --fail-under=${COVERAGE_FAIL_UNDER}`. The default threshold is 80%, and callers may raise it with `COVERAGE_FAIL_UNDER=<n>`.
-2. **Per-file / pooled statement coverage**: `juniper-coverage-gap-map --coverage-json reports/coverage.json --enforce` from `juniper-ci-tools>=0.6.0,<0.7.0`. This fails when any source file is below 90% statement coverage or any packaged sub-module is below 95% statement-weighted pooled coverage.
+- **Aggregate package coverage**: `python -m coverage report --fail-under=${COVERAGE_FAIL_UNDER}`. The default threshold is 80%, and callers may raise it with `COVERAGE_FAIL_UNDER=<n>`.
 
-`util/run_coverage.bash` is the local source of truth for reproducing CI. It runs the full test suite, writes `reports/coverage.json`, checks the aggregate threshold, and then runs the per-file gate when `juniper-coverage-gap-map` is installed. If the console script is missing, the local helper prints the `pip install "juniper-ci-tools>=0.6.0,<0.7.0"` hint and skips only the per-file check; CI always installs the tool and treats that gate as blocking.
+`util/run_coverage.bash` is the local source of truth for reproducing that gate. It runs the full test suite with pytest-cov and then runs `coverage report --fail-under` with the same default threshold as CI. CI also writes JUnit XML, coverage XML, and HTML coverage artifacts; the local helper intentionally focuses on the pass/fail coverage gate.
 
 Use plain `pytest` for narrow debug loops. Do not use a narrowed test selection to approve coverage, because a subset can lower or skew the package/file percentages relative to CI.
 
@@ -249,8 +249,8 @@ For GitHub Actions PRs, verify that only the intended `uses:` SHA and version co
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
 | Action version comment disagrees with the SHA | Manual edit or incomplete Dependabot update | Reconcile the `uses:` SHA with the upstream release tag before merging |
-| `docs` job fails on an internal link | Renamed or moved markdown target | Run `python scripts/check_doc_links.py --exclude templates --exclude history` locally and update the link |
-| `unit-tests` fails in `juniper-coverage-gap-map --enforce` | A source file dropped below 90% statement coverage or a packaged sub-module dropped below 95% pooled coverage | Run `make coverage` with `juniper-ci-tools` installed, inspect the reported file/module gaps, and add focused tests for uncovered branches |
+| `docs` job fails on an internal link | Renamed or moved markdown target | Install `juniper-doc-tools`, run the same `juniper-check-doc-links` command from `ci.yml`, and update the link |
+| `unit-tests` fails in `coverage report --fail-under` | Aggregate package coverage dropped below `${COVERAGE_FAIL_UNDER}` (80% by default) | Run `make coverage`, inspect `term-missing` output, and add focused tests for uncovered branches |
 | Linux torch install differs from macOS | Linux CI uses the CPU-only PyTorch index; macOS uses PyPI | Keep OS-specific torch installation branches in `ci.yml` |
 | `security` fails on `pip-audit` after a runner image change | Newly reported dependency or runner-provided package vulnerability | Check the generated requirements file and only add ignores for documented no-fix cases |
 
