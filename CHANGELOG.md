@@ -20,6 +20,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   standard `org.opencontainers.image.revision` / `.created` / `.version`
   labels.
 
+### Changed
+
+- **CI: per-file coverage is now a blocking gate (ecosystem per-file coverage rollout C-5).**
+  The `unit-tests` job now emits `--cov-report=json` and runs the shared
+  `juniper-coverage-gap-map --enforce` gate from `juniper-ci-tools>=0.6.0,<0.7.0`,
+  **failing the build** when any source file's statement coverage is below 90% or any
+  packaged sub-module's pooled (statement-weighted) coverage is below 95%. This is additive
+  to the existing aggregate `--cov-fail-under=80` gate; the shared tool computes statement %
+  itself from `reports/coverage.json`, so the `branch = true` coverage config does not change
+  the gate basis. `util/run_coverage.bash` reproduces both gates locally (the per-file gate is
+  skipped with a hint when `juniper-coverage-gap-map` is not installed). See juniper-ml
+  `notes/JUNIPER_ECOSYSTEM_PER_FILE_COVERAGE_ROLLOUT_SCOPING_2026-06-30.md`.
+
+### Tests
+
+- **Lifted per-file / pooled coverage to the ratified bars** (overall 92.5% → 95.5%
+  statement-pooled) with no production-code changes. Added error-path tests for
+  `http_health.py` (88.96% → 98%: request-line / header read timeouts, empty / oversize /
+  non-ASCII request lines, the never-crash 500 outer handler, and the missing-`resource`-module
+  fallback), `ws_connection.py` (receive-when-disconnected, the `ConnectionClosed` unwind, the
+  best-effort `close()` swallow, and the mTLS `load_verify_locations` / `load_cert_chain`
+  branches), and `task_executor.py` (tensor→float-list correlation coercion and the
+  `_get_activation_function` lowercase-retry / unknown-name fallback). Every source file is now
+  ≥90% statement and the `juniper_cascor_worker` sub-module pools to 96.83%.
+
 ### Fixed
 
 - **`juniper_cascor_worker.__version__` aligned `0.3.0` → `0.4.0`** to match
