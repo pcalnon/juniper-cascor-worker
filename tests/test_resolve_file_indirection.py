@@ -38,8 +38,11 @@ import pytest
 from juniper_cascor_worker.config import WorkerConfig, _resolve
 from juniper_cascor_worker.constants import (
     ENV_AUTH_TOKEN,
+    ENV_AUTHKEY,
     ENV_SERVER_URL,
+    LEGACY_ENV_API_KEY,
     LEGACY_ENV_AUTH_TOKEN,
+    LEGACY_ENV_AUTHKEY,
     LEGACY_ENV_SERVER_URL,
 )
 
@@ -63,12 +66,18 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[pytest.MonkeyPatch]:
     """
     for name in (
         ENV_AUTH_TOKEN,
+        ENV_AUTHKEY,
         ENV_SERVER_URL,
+        LEGACY_ENV_API_KEY,
         LEGACY_ENV_AUTH_TOKEN,
+        LEGACY_ENV_AUTHKEY,
         LEGACY_ENV_SERVER_URL,
         f"{ENV_AUTH_TOKEN}_FILE",
+        f"{ENV_AUTHKEY}_FILE",
         f"{ENV_SERVER_URL}_FILE",
+        f"{LEGACY_ENV_API_KEY}_FILE",
         f"{LEGACY_ENV_AUTH_TOKEN}_FILE",
+        f"{LEGACY_ENV_AUTHKEY}_FILE",
         f"{LEGACY_ENV_SERVER_URL}_FILE",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -366,4 +375,98 @@ class TestCliFileIndirection:
 
         assert config.auth_token == "MySecretToken123"  # type: ignore[attr-defined]
         # Canonical `_FILE` — no DeprecationWarning expected.
+        assert [w for w in caught if issubclass(w.category, DeprecationWarning)] == []
+
+    def test_run_websocket_loads_auth_token_from_api_key_file(
+        self,
+        clean_env: pytest.MonkeyPatch,
+        secret_file: Path,
+    ) -> None:
+        """The secondary legacy alias participates in the same Docker-secrets
+        indirection chain as ``CASCOR_AUTH_TOKEN_FILE``.
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            config = self._drive_run_websocket(clean_env, secret_file, f"{LEGACY_ENV_API_KEY}_FILE")
+
+        assert config.auth_token == "MySecretToken123"  # type: ignore[attr-defined]
+        assert config.server_url == "ws://juniper-cascor:8200/ws/v1/workers"  # type: ignore[attr-defined]
+
+
+class TestCliLegacyFileIndirection:
+    """Pin ``cli.py:_run_legacy`` to the same ``_FILE`` resolution contract
+    as WebSocket mode so Docker-secret authkeys work at the entry point.
+    """
+
+    def _build_args(self) -> "object":  # noqa: ANN001
+        from unittest.mock import MagicMock
+
+        mock_args = MagicMock()
+        mock_args.manager_host = "127.0.0.1"
+        mock_args.manager_port = 50000
+        mock_args.authkey = None
+        mock_args.workers = 1
+        mock_args.mp_context = "forkserver"
+        return mock_args
+
+    def _fake_worker_factory(self) -> "tuple[type, list]":  # noqa: ANN001
+        captured_config: list = []
+
+        class _FakeWorker:
+            def __init__(self, config) -> None:  # type: ignore[no-untyped-def]
+                captured_config.append(config)
+
+            def connect(self) -> None:
+                pass
+
+            def start(self) -> None:
+                pass
+
+            def disconnect(self) -> None:
+                pass
+
+        return _FakeWorker, captured_config
+
+    def _drive_run_legacy(
+        self,
+        clean_env: pytest.MonkeyPatch,
+        secret_file: Path,
+        env_var_name: str,
+    ) -> "object":
+        from unittest.mock import MagicMock, patch
+
+        from juniper_cascor_worker.cli import _run_legacy
+
+        clean_env.setenv(env_var_name, str(secret_file))
+        fake_worker_cls, captured = self._fake_worker_factory()
+        fake_event = MagicMock()
+        fake_event.wait.return_value = None
+
+        with patch("juniper_cascor_worker.worker.CandidateTrainingWorker", fake_worker_cls), patch("juniper_cascor_worker.cli.signal.signal"), patch("juniper_cascor_worker.cli.threading.Event", return_value=fake_event):
+            _run_legacy(self._build_args())
+
+        assert captured, "_run_legacy never reached WorkerConfig construction"
+        return captured[0]
+
+    def test_run_legacy_loads_authkey_from_legacy_file(
+        self,
+        clean_env: pytest.MonkeyPatch,
+        secret_file: Path,
+    ) -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            config = self._drive_run_legacy(clean_env, secret_file, f"{LEGACY_ENV_AUTHKEY}_FILE")
+
+        assert config.authkey == "MySecretToken123"  # type: ignore[attr-defined]
+
+    def test_run_legacy_loads_authkey_from_canonical_file(
+        self,
+        clean_env: pytest.MonkeyPatch,
+        secret_file: Path,
+    ) -> None:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config = self._drive_run_legacy(clean_env, secret_file, f"{ENV_AUTHKEY}_FILE")
+
+        assert config.authkey == "MySecretToken123"  # type: ignore[attr-defined]
         assert [w for w in caught if issubclass(w.category, DeprecationWarning)] == []

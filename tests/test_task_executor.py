@@ -190,6 +190,29 @@ class TestTensorConversion:
             assert arr.dtype == np.float32, f"Tensor '{name}' dtype is {arr.dtype}, expected float32"
 
 
+@pytest.mark.unit
+class TestWireParameterCoercion:
+    def test_wire_float_integer_bounds_are_passed_to_candidate_unit_as_ints(self):
+        """Remote dispatch may serialize int-valued CandidateUnit params as
+        floats; the worker must coerce them before construction.
+        """
+        mock_cls, _mock_instance = _make_mock_candidate_unit()
+        mock_module = MagicMock()
+        mock_module.CandidateUnit = mock_cls
+
+        candidate_data = _make_candidate_data()
+        candidate_data["random_max_value"] = 5.0
+        candidate_data["sequence_max_value"] = 3.0
+
+        with patch.dict(sys.modules, {"candidate_unit": MagicMock(), "candidate_unit.candidate_unit": mock_module}):
+            execute_training_task(candidate_data, _make_training_params(), _make_tensors())
+
+        kwargs = mock_cls.call_args.kwargs
+        assert kwargs["CandidateUnit__random_max_value"] == 5
+        assert type(kwargs["CandidateUnit__random_max_value"]) is int
+        assert kwargs["CandidateUnit__sequence_max_value"] == 3
+        assert type(kwargs["CandidateUnit__sequence_max_value"]) is int
+
 # ---------------------------------------------------------------------------
 # Result coercion + activation resolution.
 # Per-file coverage rollout C-5 (juniper-ml
@@ -198,8 +221,6 @@ class TestTensorConversion:
 # _get_activation_function lowercase-retry / unknown-name fallback so
 # task_executor.py clears the ratified per-file statement bar.
 # ---------------------------------------------------------------------------
-
-
 @pytest.mark.unit
 class TestResultCoercion:
     def test_tensor_all_correlations_coerced_to_float_list(self):
