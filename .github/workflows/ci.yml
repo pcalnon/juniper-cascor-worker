@@ -289,6 +289,7 @@ jobs:
             --cov=juniper_cascor_worker \
             --cov-report=term-missing \
             --cov-report=xml:reports/coverage.xml \
+            --cov-report=json:reports/coverage.json \
             --cov-report=html:reports/htmlcov
 
       - name: Enforce Coverage Gate
@@ -299,6 +300,22 @@ jobs:
 
           python -m coverage report --fail-under=${COVERAGE_FAIL_UNDER}
 
+      - name: Enforce per-file coverage gate (blocking)
+        # Per-file coverage rollout C-5 (juniper-ml
+        # notes/JUNIPER_ECOSYSTEM_PER_FILE_COVERAGE_ROLLOUT_SCOPING_2026-06-30.md):
+        # exit 1 if any source file's statement coverage < 90 OR a sub-module's
+        # pooled (statement-weighted) coverage < 95. This is additive to the
+        # aggregate >=80% gate above. The shared juniper-ci-tools gate computes
+        # statement % itself from coverage.json, so the branch=true coverage
+        # config does not change the gate basis.
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       juniper-cascor-worker - Per-File Coverage Gate       ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+
+          pip install "juniper-ci-tools>=0.6.0,<0.7.0"
+          juniper-coverage-gap-map --coverage-json reports/coverage.json --enforce
+
       - name: Upload Coverage Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         if: always()
@@ -306,6 +323,7 @@ jobs:
           name: coverage-report-py${{ matrix.python-version }}
           path: |
             reports/coverage.xml
+            reports/coverage.json
             reports/htmlcov/
           retention-days: 30
 

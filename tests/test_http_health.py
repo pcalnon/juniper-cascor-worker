@@ -16,12 +16,13 @@ from __future__ import annotations
 import asyncio
 import json
 import socket
+import sys
 from typing import Optional, Tuple
 
 import pytest
 import pytest_asyncio
 
-from juniper_cascor_worker.constants import LIVENESS_TICK_BUDGET_MS
+from juniper_cascor_worker.constants import HEALTH_REQUEST_MAX_BYTES, HEALTH_REQUEST_READ_TIMEOUT_S, LIVENESS_TICK_BUDGET_MS
 from juniper_cascor_worker.http_health import HealthProbeError, HealthServer, sample_rss_mb
 
 
@@ -293,3 +294,132 @@ def test_sample_rss_mb_handles_resource_error(monkeypatch):
     monkeypatch.setattr("resource.getrusage", _raises)
     rss = hh._sample_rss_mb_impl()
     assert rss == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Connection-handler error branches + resource-import fallback.
+# Per-file coverage rollout C-5 (juniper-ml
+# notes/JUNIPER_ECOSYSTEM_PER_FILE_COVERAGE_ROLLOUT_SCOPING_2026-06-30.md):
+# lift http_health.py to the ratified >=90% per-file statement bar by
+# exercising the timeout, malformed-request, and never-crash outer-handler
+# paths that the happy-path suite above does not reach.
+# ---------------------------------------------------------------------------
+
+
+async def _raw_exchange(host: str, port: int, *, send: Optional[bytes], eof: bool = False, hold: float = 0.0) -> int:
+    """Open a connection, optionally write ``send``, optionally half-close
+    (EOF) or hold the connection open for ``hold`` seconds, then read and
+    return the HTTP status code from the response."""
+    reader, writer = await asyncio.open_connection(host, port)
+    try:
+        if send is not None:
+            writer.write(send)
+            await writer.drain()
+        if eof:
+            writer.write_eof()
+        if hold:
+            await asyncio.sleep(hold)
+        data = await reader.read(8192)
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:  # noqa: BLE001
+            pass
+
+    head, _, _body = data.partition(b"\r\n\r\n")
+    status_line = head.decode("ascii", errors="replace").split("\r\n")[0]
+    parts = status_line.split(" ", 2)
+    return int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else 0
+
+
+@pytest.mark.asyncio
+async def test_stop_is_noop_when_never_started():
+    """stop() on an unstarted server is a safe no-op (idempotent teardown)."""
+    srv = HealthServer(
+        liveness_tick=lambda: None,
+        readiness_tick=lambda: None,
+        worker_id_provider=lambda: "w1",
+        version="1.2.3",
+        host="127.0.0.1",
+        port=_free_port(),
+    )
+    assert srv.started is False
+    await srv.stop()  # must not raise
+    assert srv.started is False
+
+
+@pytest.mark.asyncio
+async def test_empty_request_rejected_400(server_factory):
+    """A client that half-closes without sending a request line -> 400."""
+    _srv, port = await server_factory()
+    status = await _raw_exchange("127.0.0.1", port, send=None, eof=True)
+    assert status == 400
+
+
+@pytest.mark.asyncio
+async def test_oversize_request_line_rejected_400(server_factory):
+    """A request line exceeding HEALTH_REQUEST_MAX_BYTES -> 400 (distinct from
+    the oversize-header path already covered above)."""
+    _srv, port = await server_factory()
+    huge = b"GET /" + b"a" * (HEALTH_REQUEST_MAX_BYTES + 10) + b" HTTP/1.1\r\n\r\n"
+    status = await _raw_exchange("127.0.0.1", port, send=huge)
+    assert status == 400
+
+
+@pytest.mark.asyncio
+async def test_non_ascii_request_line_rejected_400(server_factory):
+    """A request line carrying non-ASCII bytes -> 400 without crashing the listener."""
+    _srv, port = await server_factory()
+    status = await _raw_exchange("127.0.0.1", port, send=b"GET /\xff\xfe HTTP/1.1\r\n\r\n")
+    assert status == 400
+
+
+@pytest.mark.asyncio
+async def test_request_line_read_timeout_408(server_factory):
+    """Connecting without sending anything trips the request-line read timeout -> 408."""
+    _srv, port = await server_factory()
+    status = await _raw_exchange("127.0.0.1", port, send=None, hold=HEALTH_REQUEST_READ_TIMEOUT_S + 0.5)
+    assert status == 408
+
+
+@pytest.mark.asyncio
+async def test_header_read_timeout_408(server_factory):
+    """Sending a request line but never the terminating blank line trips the
+    header read timeout -> 408."""
+    _srv, port = await server_factory()
+    status = await _raw_exchange("127.0.0.1", port, send=b"GET /v1/health HTTP/1.1\r\n", hold=HEALTH_REQUEST_READ_TIMEOUT_S + 0.5)
+    assert status == 408
+
+
+@pytest.mark.asyncio
+async def test_handler_returns_500_when_response_build_raises():
+    """An unexpected error while building a response must be caught by the outer
+    handler and surfaced as 500 — one bad request never kills the listener."""
+
+    def _boom() -> str:
+        raise RuntimeError("provider blew up")
+
+    port = _free_port()
+    srv = HealthServer(
+        liveness_tick=lambda: None,
+        readiness_tick=lambda: None,
+        worker_id_provider=_boom,
+        version="1.2.3",
+        host="127.0.0.1",
+        port=port,
+    )
+    await srv.start()
+    try:
+        status = await _raw_exchange("127.0.0.1", port, send=b"GET /v1/health HTTP/1.1\r\nHost: x\r\n\r\n")
+        assert status == 500
+    finally:
+        await srv.stop()
+
+
+def test_sample_rss_mb_handles_missing_resource_module(monkeypatch):
+    """On a platform without the ``resource`` module the sampler returns 0.0."""
+    import juniper_cascor_worker.http_health as hh
+
+    monkeypatch.setitem(sys.modules, "resource", None)
+    assert hh._sample_rss_mb_impl() == 0.0
