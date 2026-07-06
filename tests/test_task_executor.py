@@ -213,6 +213,7 @@ class TestWireParameterCoercion:
         assert kwargs["CandidateUnit__sequence_max_value"] == 3
         assert type(kwargs["CandidateUnit__sequence_max_value"]) is int
 
+
 # ---------------------------------------------------------------------------
 # Result coercion + activation resolution.
 # Per-file coverage rollout C-5 (juniper-ml
