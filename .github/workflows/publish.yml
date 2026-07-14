@@ -38,8 +38,14 @@ jobs:
           VERSION="${{ github.event.release.tag_name }}"
           VERSION="${VERSION#v}"
           sleep 30
-          pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ juniper-cascor-worker==${VERSION}
-          python -c "import juniper_cascor_worker; print(f'TestPyPI OK: v{juniper_cascor_worker.__version__}')"
+          # NOTE (security): install with --no-deps against TestPyPI only. Do NOT add a
+          # production-PyPI fallback index here — with --no-deps no deps are fetched, so a
+          # fallback only risks resolving a squatted target package. The sleep above
+          # covers TestPyPI index lag.
+          pip install --no-deps --index-url https://test.pypi.org/simple/ juniper-cascor-worker==${VERSION}
+          # --no-deps leaves numpy/torch/juniper-config-tools (+ other runtime deps) absent, so the
+          # package cannot be imported here; assert the published version via importlib.metadata instead.
+          python -c "import importlib.metadata as m; print('TestPyPI install OK', m.version('juniper-cascor-worker'))"
 
   pypi:
     name: Publish to PyPI
