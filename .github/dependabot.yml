@@ -49,3 +49,7 @@ updates:
       - "ci"
     commit-message:
       prefix: "ci"
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
