@@ -4,7 +4,7 @@
 **Repository**: pcalnon/juniper-cascor-worker
 **Author**: Paul Calnon
 **License**: MIT License
-**Version**: 0.4.0
+**Version**: 0.5.0
 **Python**: >=3.11 (supports 3.11, 3.12, 3.13, 3.14)
 **Last Updated**: 2026-07-04
 
