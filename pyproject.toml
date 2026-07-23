@@ -17,7 +17,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "juniper-cascor-worker"
-version = "0.4.0"
+version = "0.5.0"
 description = "Remote candidate training worker for the JuniperCascor neural network service"
 readme = "README.md"
 license = "MIT"
