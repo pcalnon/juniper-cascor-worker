@@ -1,0 +1,179 @@
+---
+#####################################################################################################################################################################################################
+# Project:       Juniper
+# Sub-Project:   juniper-cascor-worker
+# Application:   juniper_cascor_worker
+# File Name:     sequence-safety.yml
+# Author:        Paul Calnon
+# Version:       0.1.0
+#
+# Date Created:  2026-08-08
+# Last Modified: 2026-08-08
+#
+# License:       MIT License
+# Copyright:     Copyright (c) 2024-2026 Paul Calnon
+#
+# Description:
+#    Per-PR sequence-safety net (ADVISORY, standalone) -- the compositional-loss screen
+#    fanned out from juniper-ml (flood-remediation analysis §4 item 8; ecosystem rollout
+#    plan Wave-2). Runs the AST symbol-loss screen + the docs deletion-magnitude screen
+#    over the PR's base..HEAD, so the silent-deletion / net-docs-deletion classes that a
+#    green-per-PR merge storm can ship are visible AT REVIEW. Uploads both JSON reports as
+#    the `sequence-safety-report` artifact a reviewer / supervisor can consume.
+#
+#    Unlike the two juniper-ml / juniper-cascor pioneers (which ran hand-copied inline
+#    util/sequence_safety/ modules), this repo consumes the screens from the PUBLISHED
+#    juniper-ci-tools package (>=0.8.0,<0.9.0) via its two console scripts --
+#    juniper-symbol-loss-check + juniper-docs-additions-check -- the single source of truth
+#    that ends the inline-copy drift class the house killed twice before (doc-tools,
+#    dep-docs).
+#
+#    Scope: the worker's Python surface is juniper_cascor_worker/** + tests/** (NOT the
+#    ml-default tests/*.py + util/**), so the symbol screen is invoked with an explicit
+#    repeated --scope glob per script. The docs screen ships the universal default
+#    (AGENTS.md + docs/**/*.md + notes/**/*.md), which already covers this repo, so it takes
+#    no --scope.
+#
+#    ADVISORY, NOT a required check (the codeql soak convention). This is a STANDALONE
+#    workflow, deliberately separate from ci.yml, so it is never wired into the CI Quality
+#    Gate and never blocks a merge. It informs the owner's review; enforcement is the
+#    post-merge net (main-verify.yml). Promotion to a required context, if ever desired,
+#    is an owner-only branch-ruleset decision -- this PR makes NO ruleset change.
+#
+#    Label hatch (WARN-only): the owner-applied `allow-symbol-loss` / `docs-rewrite` PR
+#    labels demote THAT screen's FAIL to WARN-only for this run (`--advisory`: exit 0 with
+#    findings still printed). A bare label is a blanket per-PR override, intentionally
+#    demoted to WARN-only; the auditable enumerated `Allow-Symbol-Loss:` /
+#    `Allow-Docs-Rewrite:` commit trailer (parsed inside the modules, travels in git
+#    history so it also covers the post-merge net) stays the PRIMARY waiver. Labels are
+#    read live via `gh pr view`, so applying one + re-running the job takes effect with no
+#    re-push.
+#
+# Security Notes:
+#    - pull_request-triggered only; workflow permissions are least-privilege
+#      (contents: read + pull-requests: read for the label hatch).
+#    - The screens are pure git + stdlib (no network at screen time); the only network use
+#      is the pinned `pip install juniper-ci-tools` step, and the actions are SHA-pinned
+#      (checkout / setup-python / upload-artifact).
+#
+# References:
+#    - juniper-ci-tools console scripts: juniper-symbol-loss-check, juniper-docs-additions-check
+#    - juniper-ml .github/workflows/main-verify.yml + juniper-cascor sequence-safety.yml (the pioneers this ports)
+#    - juniper-ml notes/JUNIPER_2026-08-07_JUNIPER-ECOSYSTEM_SEQUENCE-SAFETY-ROLLOUT-PLAN.md (Wave-2)
+#####################################################################################################################################################################################################
+
+name: Sequence Safety (Advisory)
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+# Per-PR ref, cancel superseded runs: an advisory review signal only needs the latest push.
+concurrency:
+  group: sequence-safety-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_TEST_VERSION: "3.14"
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # sequence-safety (ADVISORY): AST symbol-loss screen + docs deletion-magnitude screen over the PR's
+  # base..HEAD. Standalone + advisory -- never a required context, never wired into the CI gate.
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  sequence-safety:
+    name: Sequence Safety (Advisory)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # gh pr view --json labels for the WARN-only label hatch
+    steps:
+      - name: Checkout Code (full history)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # need base + head for the three-dot merge-base screens
+
+      - name: Set up Python ${{ env.PYTHON_TEST_VERSION }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_TEST_VERSION }}
+
+      - name: Install juniper-ci-tools (pinned, sequence-safety screens)
+        run: |
+          python -m pip install --upgrade "pip>=26.1.1"
+          pip install "juniper-ci-tools>=0.8.0,<0.9.0"
+
+      - name: Run sequence-safety screens (symbol + docs)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -uo pipefail
+          set +e # this step handles the screen exit codes manually
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║   juniper-cascor-worker - Per-PR Sequence-Safety Screens   ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          base="$PR_BASE_SHA"
+          if [ -z "$base" ]; then
+            echo "::error::could not resolve a base sha for this pull_request"
+            exit 2
+          fi
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "$base" || true
+          fi
+          # Symbol screen scope: the worker's Python surface is juniper_cascor_worker/** +
+          # tests/** (NOT the ml-default tests/*.py + util/**). --scope is repeatable (one
+          # glob per flag), so pass an array. The docs screen keeps the universal default.
+          sym_scope=(--scope 'juniper_cascor_worker/**/*.py' --scope 'tests/**/*.py')
+          # Label hatch: read the PR's CURRENT labels (live via gh, so apply-label + re-run
+          # works with no push).
+          sym_adv=""
+          docs_adv=""
+          if [ -n "$PR_NUMBER" ]; then
+            labels="$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>/dev/null || true)"
+            if printf '%s\n' "$labels" | grep -qx 'allow-symbol-loss'; then sym_adv="--advisory"; echo "label allow-symbol-loss -> symbol screen ADVISORY (WARN-only)"; fi
+            if printf '%s\n' "$labels" | grep -qx 'docs-rewrite'; then docs_adv="--advisory"; echo "label docs-rewrite -> docs screen ADVISORY (WARN-only)"; fi
+          fi
+          echo "Screening ${base} .. HEAD"
+          echo ""
+          echo "--- symbol-loss screen ---"
+          # shellcheck disable=SC2086  # $sym_adv is an intentional empty-or---advisory token
+          juniper-symbol-loss-check "${sym_scope[@]}" --base "$base" --head HEAD $sym_adv
+          src=$?
+          # shellcheck disable=SC2086
+          juniper-symbol-loss-check "${sym_scope[@]}" --base "$base" --head HEAD $sym_adv --json > symbol-report.json || true
+          echo ""
+          echo "--- docs deletion-magnitude screen ---"
+          # shellcheck disable=SC2086
+          juniper-docs-additions-check --base "$base" --head HEAD $docs_adv
+          drc=$?
+          # shellcheck disable=SC2086
+          juniper-docs-additions-check --base "$base" --head HEAD $docs_adv --json > docs-report.json || true
+          echo ""
+          echo "symbol screen exit=${src} ; docs screen exit=${drc}"
+          if [ "${src}" -ge 2 ] || [ "${drc}" -ge 2 ]; then
+            echo "::error::sequence-safety screen invocation error (see log)"
+            exit 2
+          fi
+          if [ "${src}" -ge 1 ] || [ "${drc}" -ge 1 ]; then
+            echo "::error::per-PR compositional-loss finding(s) -- see the screens above and the sequence-safety-report artifact. Waive an intended removal with an Allow-Symbol-Loss / Allow-Docs-Rewrite commit trailer, or (owner) apply the allow-symbol-loss / docs-rewrite label for a WARN-only downgrade."
+            exit 1
+          fi
+          echo "::notice::sequence-safety screens clean (or waived) for this PR"
+
+      - name: Upload sequence-safety report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sequence-safety-report
+          path: |
+            symbol-report.json
+            docs-report.json
+          if-no-files-found: warn
+          retention-days: 30

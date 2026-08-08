@@ -1,0 +1,312 @@
+---
+#####################################################################################################################################################################################################
+# Project:       Juniper
+# Sub-Project:   juniper-cascor-worker
+# Application:   juniper_cascor_worker
+# File Name:     main-verify.yml
+# Author:        Paul Calnon
+# Version:       0.1.0
+#
+# Date Created:  2026-08-08
+# Last Modified: 2026-08-08
+#
+# License:       MIT License
+# Copyright:     Copyright (c) 2024-2026 Paul Calnon
+#
+# Description:
+#    Post-merge main-verification net (fanned out from juniper-ml; flood-remediation
+#    analysis §4 item 8; ecosystem rollout plan Wave-2). Runs AFTER a merge lands on main,
+#    so it fires no matter who merged or what they bypassed -- the bypass-proof
+#    compositional-loss net the per-PR advisory screen (sequence-safety.yml) cannot
+#    guarantee. The flood damage class was every-PR-green but serial same-file merges fused
+#    / silently deleted sibling content, and a deleted test cannot fail, so nothing per-PR
+#    saw it.
+#
+#    Unlike the two juniper-ml / juniper-cascor pioneers (hand-copied inline
+#    util/sequence_safety/ modules), this repo consumes the screens from the PUBLISHED
+#    juniper-ci-tools package (>=0.8.0,<0.9.0) via its juniper-symbol-loss-check +
+#    juniper-docs-additions-check console scripts -- the single source of truth.
+#
+#    Jobs:
+#      * symbol-screen -- ALWAYS runs. AST symbol-loss screen + docs deletion-magnitude
+#        screen of BASE .. <merge>, both via the ci-tools console scripts. The symbol
+#        screen is scoped to juniper_cascor_worker/** + tests/** (repeated --scope); the
+#        docs screen keeps the universal default. Uploads the JSON reports as an artifact.
+#        FAILs the job on a compositional-loss finding. Seconds to run (AST + git).
+#          CATCH-UP BASE (ml#880 G3.1): a quoted `[skip ci]` in a merge-commit body skips
+#          this workflow entirely, so a window of merges can land un-screened. BASE is
+#          therefore resolved to the head_sha of the most recent SUCCESSFUL main-verify run
+#          on main WHEN it is an ancestor of HEAD, so the NEXT run sweeps every skipped
+#          merge in between; it falls back to github.event.before (the push's first parent),
+#          then HEAD^1. The chosen base + reason are echoed to the step summary.
+#      * notify -- on failure only. Upserts a STABLE-TITLE dedup tracking issue (ml#928):
+#        ONE open issue per red streak; each subsequent failing SHA COMMENTS on it. Dedup
+#        binds to the workflow's OWN authorship (creator=github-actions[bot] + exact title
+#        + .pull_request == null), never title alone -- a forgeable public title is not a
+#        trust boundary. NOT auto-closed on green (the owner closes it after adjudication).
+#
+#    v1 DEFERRALS (adaptation notes, distinct from the juniper-ml original):
+#      * Battery job DEFERRED: juniper-ml re-runs its full battery post-merge, but the
+#        worker's suite is heavy (pytest + torch + coverage, minutes not seconds). v1 ships
+#        the screens-only net; a post-merge regression battery is a follow-up once the
+#        screens have soaked. The per-branch CI (ci.yml) still runs the full suite pre-merge.
+#      * Slack DEFERRED: the worker has no SLACK_WEBHOOK_URL workflow pattern, so v1 notifies
+#        via the tracking issue only (add a non-blocking Slack step later if a webhook secret
+#        is provisioned, mirroring juniper-ml's release-train pattern).
+#
+# Concurrency (grounded design requirement):
+#    ci.yml uses group: ci-${{ github.ref }} + cancel-in-progress: true, and for main
+#    pushes github.ref is constant (refs/heads/main), so rapid serial merges CANCEL each
+#    other and only the last merge is verified. This net MUST use a per-SHA group with
+#    cancel-in-progress: false so EVERY merge is verified during a storm (delayed by the
+#    runner cap, never dropped).
+#
+# Security Notes:
+#    - Runs on push:main + manual dispatch only (never on forks / PRs).
+#    - Workflow-level permissions are 'contents: read'; the symbol-screen job adds
+#      'actions: read' (gh api reads the last successful run for the catch-up base) and
+#      only the notify job elevates ('issues: write') to upsert the tracking issue.
+#
+# References:
+#    - juniper-ci-tools console scripts: juniper-symbol-loss-check, juniper-docs-additions-check
+#    - juniper-ml .github/workflows/main-verify.yml (the #928 stable-title / catch-up-base version this ports)
+#    - juniper-ml notes/JUNIPER_2026-08-07_JUNIPER-ECOSYSTEM_SEQUENCE-SAFETY-ROLLOUT-PLAN.md (Wave-2)
+#####################################################################################################################################################################################################
+
+name: Post-Merge Main Verification
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Per-SHA, no-cancel: EVERY merge to main is verified even during a merge storm. Contrast
+# ci.yml (group: ci-${{ github.ref }} + cancel-in-progress: true), where serial main pushes
+# cancel each other so only the last merge's run survives.
+concurrency:
+  group: main-verify-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_TEST_VERSION: "3.14"
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # symbol-screen (ALWAYS runs): the bypass-proof compositional-loss net -- AST symbol-loss screen +
+  # docs deletion-magnitude screen of the catch-up BASE .. <merge>. Seconds to run (AST + git).
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  symbol-screen:
+    name: Symbol & Docs Screen
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # gh api reads the last successful main-verify run for the catch-up base
+    steps:
+      - name: Checkout Code (full history)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Need the catch-up base / github.event.before AND the new tip -> full history.
+          fetch-depth: 0
+
+      - name: Set up Python ${{ env.PYTHON_TEST_VERSION }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_TEST_VERSION }}
+
+      - name: Install juniper-ci-tools (pinned, sequence-safety screens)
+        run: |
+          python -m pip install --upgrade "pip>=26.1.1"
+          pip install "juniper-ci-tools>=0.8.0,<0.9.0"
+
+      - name: Resolve catch-up base
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          # CATCH-UP BASE (ml#880 G3.1): a quoted `[skip ci]` in a merge-commit body skips THIS
+          # workflow entirely, so a window of merges can land un-screened. Resolve BASE to the
+          # head_sha of the most recent SUCCESSFUL main-verify run on main WHEN it is an ancestor
+          # of HEAD, so the next run sweeps every merge skipped in between. Fall back to
+          # github.event.before (the push's first parent), then HEAD^1 (force-push / dispatch).
+          last_ok="$(gh api "repos/${REPO}/actions/workflows/main-verify.yml/runs?status=success&branch=main&per_page=1" --jq '.workflow_runs[0].head_sha' 2>/dev/null || true)"
+          base=""
+          reason=""
+          if [ -n "$last_ok" ] && [ "$last_ok" != "null" ] \
+              && git rev-parse --verify -q "${last_ok}^{commit}" >/dev/null 2>&1 \
+              && [ "$last_ok" != "$HEAD_SHA" ] \
+              && git merge-base --is-ancestor "$last_ok" "$HEAD_SHA" 2>/dev/null; then
+            n="$(git rev-list --count "${last_ok}..${HEAD_SHA}" 2>/dev/null || echo '?')"
+            base="$last_ok"
+            reason="catch-up from ${last_ok} (${n} commits)"
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+              && git rev-parse --verify -q "${BEFORE}^{commit}" >/dev/null 2>&1; then
+            base="$BEFORE"
+            reason="event.before (${BEFORE})"
+          else
+            base="$(git rev-parse --verify -q 'HEAD^1' || git rev-parse HEAD)"
+            reason="HEAD^1 fallback (force-push / initial / dispatch)"
+          fi
+          echo "base=${base}" >> "$GITHUB_OUTPUT"
+          echo "Post-merge screen base: ${reason}"
+          {
+            echo "### Post-merge sequence-safety base (catch-up)"
+            echo ""
+            echo "- HEAD: \`${HEAD_SHA}\`"
+            echo "- BASE: \`${base}\`"
+            echo "- reason: ${reason}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run sequence-safety screens (symbol + docs)
+        env:
+          BASE_REF: ${{ steps.base.outputs.base }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+          set +e # this step handles screen exit codes manually
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║  juniper-cascor-worker - Post-Merge Sequence-Safety Screens ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          # BASE is resolved by the preceding "Resolve catch-up base" step: the last SUCCESSFUL
+          # main-verify tip when it is an ancestor of HEAD (sweeping any [skip ci]-skipped window),
+          # else github.event.before, else HEAD^1. Defensive re-fallback here if it is empty.
+          base="$BASE_REF"
+          if [ -z "$base" ] || ! git rev-parse --verify -q "${base}^{commit}" >/dev/null 2>&1; then
+            base="$(git rev-parse --verify -q 'HEAD^1' || git rev-parse HEAD)"
+            echo "BASE output empty/unresolvable -> fallback = ${base}"
+          fi
+          # Symbol screen scope: the worker's Python surface is juniper_cascor_worker/** +
+          # tests/** (NOT the ml-default tests/*.py + util/**). --scope is repeatable (one
+          # glob per flag), so pass an array. The docs screen keeps the universal default.
+          sym_scope=(--scope 'juniper_cascor_worker/**/*.py' --scope 'tests/**/*.py')
+          echo "Screening ${base} .. ${HEAD_SHA}"
+          echo ""
+          echo "--- symbol-loss screen ---"
+          # Human run to the log carries the authoritative exit code; the guarded --json run
+          # then writes the artifact (same verdicts, machine-readable).
+          juniper-symbol-loss-check "${sym_scope[@]}" --base "$base" --head "$HEAD_SHA"
+          src=$?
+          juniper-symbol-loss-check "${sym_scope[@]}" --base "$base" --head "$HEAD_SHA" --json > symbol-report.json || true
+          echo ""
+          echo "--- docs deletion-magnitude screen ---"
+          juniper-docs-additions-check --base "$base" --head "$HEAD_SHA"
+          drc=$?
+          juniper-docs-additions-check --base "$base" --head "$HEAD_SHA" --json > docs-report.json || true
+          echo ""
+          echo "symbol screen exit=${src} ; docs screen exit=${drc}"
+          if [ "${src}" -ge 2 ] || [ "${drc}" -ge 2 ]; then
+            echo "::error::sequence-safety screen invocation error (see log)"
+            exit 2
+          fi
+          if [ "${src}" -ge 1 ] || [ "${drc}" -ge 1 ]; then
+            echo "::error::post-merge compositional-loss finding(s) at ${HEAD_SHA} -- see the screens above and the sequence-safety-report artifact"
+            exit 1
+          fi
+          echo "::notice::sequence-safety screens clean at ${HEAD_SHA}"
+
+      - name: Upload sequence-safety report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sequence-safety-report
+          path: |
+            symbol-report.json
+            docs-report.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # notify (on failure only): a red main-verify must be LOUD. Upserts a STABLE-TITLE dedup tracking
+  # issue -- ONE open issue titled "main-verify: post-merge verification failing" per red streak; each
+  # subsequent failing SHA COMMENTS on it instead of opening a new issue. NOT auto-closed on green (the
+  # owner closes it after adjudication). Dedup binds to the workflow's own AUTHORSHIP
+  # (creator=github-actions[bot] + exact title + .pull_request == null), never title alone -- a
+  # forgeable public title is not a trust boundary (ml#928 review). v1 has no Slack step (the worker has
+  # no webhook secret pattern); add one later, mirroring release-train's non-blocking pattern.
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  notify:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [symbol-screen]
+    if: failure()
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Upsert tracking issue (stable title, one per red streak)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TITLE: "main-verify: post-merge verification failing"
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SYMBOL_RESULT: ${{ needs.symbol-screen.result }}
+        run: |
+          set -uo pipefail
+          # STABLE-TITLE dedup (ml#928): a single OPEN issue tracks a whole red streak. The first
+          # failure opens it; every subsequent failing SHA COMMENTS on it, so one streak == one issue.
+          #
+          # TRUST BOUNDARY (ml#928 review): a stable title is a public, forgeable string -- anyone can
+          # pre-create an OPEN issue with the exact title and capture the tracker. The match therefore
+          # binds to the workflow's own identity: REST creator=github-actions[bot] (unforgeable
+          # authorship) + exact-title narrow + .pull_request == null (the /issues surface includes PRs).
+          # The bot-applied `main-verify` label below is defense-in-depth for operator filtering only --
+          # deliberately NOT part of this match, so a failed label application can never fork a streak.
+          existing="$(gh api "repos/${REPO}/issues?state=open&creator=github-actions%5Bbot%5D&per_page=100" --jq 'map(select(.pull_request == null) | select(.title == env.TITLE)) | .[0].number // empty' 2>/dev/null || true)"
+          if [ -n "$existing" ]; then
+            {
+              echo "Still failing at \`${SHA}\`."
+              echo ""
+              echo "| job | result |"
+              echo "|---|---|"
+              echo "| symbol-screen (symbol + docs loss) | ${SYMBOL_RESULT} |"
+              echo ""
+              echo "- Run: ${RUN_URL}"
+            } > issue-comment.md
+            echo "Commenting new failing SHA on existing tracking issue #${existing}"
+            gh issue comment "$existing" --repo "$REPO" --body-file issue-comment.md
+          else
+            {
+              echo "Post-merge **main-verify** is failing on \`main\`."
+              echo ""
+              echo "First observed failing at \`${SHA}\`."
+              echo ""
+              echo "| job | result |"
+              echo "|---|---|"
+              echo "| symbol-screen (symbol + docs loss) | ${SYMBOL_RESULT} |"
+              echo ""
+              echo "This is the bypass-proof post-merge net: a compositional loss (a silently deleted"
+              echo "def/class/method, a gutted body, or a net docs-section deletion) landed on main."
+              echo "Inspect the **sequence-safety-report** artifact (symbol-report.json /"
+              echo "docs-report.json). Subsequent failures in this streak are appended here as comments:"
+              echo ""
+              echo "- First run: ${RUN_URL}"
+              echo ""
+              echo "**Remediation:** adjudicate each finding; waive a genuinely intentional symbol"
+              echo "removal with an \`Allow-Symbol-Loss: <qualified.symbol>\` commit trailer (an"
+              echo "intentional docs rewrite with \`Allow-Docs-Rewrite: <path>\`), which travels in git"
+              echo "history so it also clears this post-merge net."
+              echo ""
+              echo "_Auto-filed by .github/workflows/main-verify.yml. One issue per red streak; the"
+              echo "owner closes it after adjudication (NOT auto-closed on green)._"
+            } > issue-body.md
+            echo "Opening the stable-title tracking issue"
+            # Bot-applied `main-verify` label: ensure it exists (idempotent, never clobbers owner
+            # customization -- no --force), open the issue, then best-effort apply. The label is
+            # operator filtering / defense-in-depth, never part of the dedup match above -- but a
+            # failed CREATE must still fail this step loudly (the tracker is the point of notify).
+            gh label create main-verify --repo "$REPO" --description "Auto-filed by the main-verify post-merge net" --color B60205 2>/dev/null || true
+            if new_url="$(gh issue create --repo "$REPO" --title "$TITLE" --body-file issue-body.md)"; then
+              gh issue edit "${new_url##*/}" --repo "$REPO" --add-label main-verify 2>/dev/null || true
+            else
+              echo "::error::failed to open the stable-title tracking issue"
+              exit 1
+            fi
+          fi
