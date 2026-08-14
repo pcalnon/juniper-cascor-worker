@@ -1,27 +1,54 @@
 # ═══════════════════════════════════════════════════════════════════════
-# AGENTS.md Touch-Up
+# AGENTS.md Date Check
 #
 # Purpose: keep the **Last Updated**: header in AGENTS.md aligned with
-#          the date the file actually changed, without asking
-#          contributors (or Claude) to remember to bump it.
+#          the date the file actually changed -- by VERIFYING it in CI,
+#          never by rewriting the contributor's branch.
 #
 # Trigger: pull_request types [opened, reopened, synchronize] with
 #          paths filter on AGENTS.md.
 #
 # Behavior:
-#   1. If the PR's cumulative diff touches AGENTS.md, the workflow
-#      reads the current **Last Updated** value.
-#   2. If it already equals today's UTC date, the job exits no-op.
-#   3. Otherwise the job sed-rewrites the line, commits with
-#      `github-actions[bot]` authorship and a `[skip ci]` tag (so
-#      the bump commit does not re-trigger any workflows), rebases
-#      against any concurrent commits on the PR branch, and pushes
-#      back.
+#   1. If AGENTS.md has no **Last Updated** field, warn and pass (the
+#      schema lint owns presence; see companion lint below).
+#   2. Otherwise the value must be a well-formed YYYY-MM-DD date and
+#      must not be in the future.
+#   3. It then passes if the value already equals today's UTC date (a
+#      second PR on the same day has nothing to bump), or if the line
+#      CHANGED in this PR.
+#   4. Anything else fails the check with the exact line to write.
 #
-# Scope: only fires for PRs from the same repository, because the
-#        default GITHUB_TOKEN is read-only for fork-triggered runs.
-#        The Juniper project is solo-authored (@pcalnon) and has no
-#        forks, so this is currently a defensive guard only.
+# Why verify instead of bump (juniper-ml#1099):
+#   This job used to sed-rewrite the line, commit as github-actions[bot]
+#   with a `[skip ci]` tag, and push back. That produced TWO failure
+#   classes once the 2026-08-12 branch-protection normalization landed:
+#
+#     * UNSIGNED COMMIT -- a local `git commit` on a runner is unsigned,
+#       and required_signatures rejects it. An unsigned commit anywhere
+#       in the branch history blocks the merge; squash does not rescue
+#       it. Every PR this lane touched became unmergeable.
+#     * [skip ci] ORPHAN -- the bump commit became the PR head, and
+#       because it carried `[skip ci]` NO required context ever reported
+#       on it, leaving the PR permanently BLOCKED with every check stuck
+#       at "expected" (juniper-cascor#515).
+#
+#   It also raced `Update Lockfile (Dependabot)` for the push slot.
+#   Verifying removes all three: no commit is created, so the lane needs
+#   no write access at all (permissions are now `contents: read`).
+#
+#   The predicate is deliberately "the line CHANGED in this PR" rather
+#   than "the line equals today". A PR opened Monday and merged Thursday
+#   would fail an equals-today check on every re-run; "changed" is stable
+#   across the PR's life, and is strictly more honest than rewriting the
+#   date to whenever CI last happened to run.
+#
+#   The release train's propose lane (juniper-ml's
+#   util/release_train/propose.py) already sets this header in its own
+#   commit, so release proposal PRs satisfy the check as authored.
+#
+# Scope: runs for fork PRs too. Verification needs no token and no
+#        secrets, so the old same-repo guard (whose only rationale was
+#        "the push back would fail") is gone.
 #
 # Companion lint: tests/test_agents_md_header_schema.py asserts
 #        Last Updated is present + in ISO 8601 date format. The
@@ -29,7 +56,7 @@
 #        is a separate concern.
 # ═══════════════════════════════════════════════════════════════════════
 
-name: AGENTS.md Touch-Up
+name: AGENTS.md Date Check
 
 on:
   pull_request:
@@ -38,38 +65,34 @@ on:
       - "AGENTS.md"
 
 concurrency:
-  group: agents-md-touch-up-${{ github.event.pull_request.number }}
+  group: agents-md-date-check-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
-  pull-requests: read
+  contents: read
 
 jobs:
-  touch-up:
-    name: Bump AGENTS.md Last Updated
+  verify-date:
+    name: Verify AGENTS.md Last Updated
     runs-on: ubuntu-latest
-    # Skip on PRs from forks: the default GITHUB_TOKEN is read-only
-    # for fork-triggered workflow runs, so the push back would fail.
-    if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Check out PR head
         uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Full history so the merge base with the PR's base commit is
+          # resolvable for the three-dot diff below.
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Bump AGENTS.md `**Last Updated**:` to today (UTC)
+      - name: Verify AGENTS.md `**Last Updated**:` was bumped in this PR
         env:
-          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           today=$(date -u +%Y-%m-%d)
 
           if ! grep -q '^\*\*Last Updated\*\*:' AGENTS.md; then
-            echo "::warning::AGENTS.md has no '**Last Updated**:' field; skipping auto-bump."
+            echo "::warning::AGENTS.md has no '**Last Updated**:' field; nothing to verify."
             exit 0
           fi
 
@@ -78,21 +101,30 @@ jobs:
             | sed -E 's/^\*\*Last Updated\*\*:[[:space:]]*//' \
             | tr -d '[:space:]')
 
+          if ! printf '%s' "$current" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+            echo "::error file=AGENTS.md::'**Last Updated**:' is not a YYYY-MM-DD date: '${current}'"
+            exit 1
+          fi
+
+          # String compare is correct for zero-padded ISO dates.
+          if [[ "$current" > "$today" ]]; then
+            echo "::error file=AGENTS.md::'**Last Updated**: ${current}' is in the future (today is ${today} UTC)."
+            exit 1
+          fi
+
+          # Already current: a second PR on the same UTC day has nothing to bump,
+          # and the line legitimately does not appear in its diff.
           if [ "$current" = "$today" ]; then
-            echo "Last Updated already $today; nothing to do."
+            echo "AGENTS.md '**Last Updated**: ${current}' is already today's UTC date."
             exit 0
           fi
 
-          echo "Bumping AGENTS.md **Last Updated**: $current -> $today"
-          sed -i "s|^\*\*Last Updated\*\*: .*|**Last Updated**: ${today}|" AGENTS.md
+          if git diff "${BASE_SHA}...HEAD" -- AGENTS.md \
+            | grep -Eq '^\+\*\*Last Updated\*\*:'; then
+            echo "AGENTS.md '**Last Updated**: ${current}' was bumped in this PR."
+            exit 0
+          fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add AGENTS.md
-          git commit -m "chore(agents-md): bump Last Updated to ${today} [skip ci]"
-
-          # Rebase against any commits that landed concurrently on
-          # the PR branch (rare; defensive). If the rebase fails the
-          # whole job fails loudly rather than force-pushing.
-          git pull --rebase origin "$PR_HEAD_REF"
-          git push origin HEAD:"$PR_HEAD_REF"
+          echo "::error file=AGENTS.md::This PR changes AGENTS.md but does not bump '**Last Updated**:' (still ${current}). Set it to today's UTC date:"
+          echo "::error file=AGENTS.md::    **Last Updated**: ${today}"
+          exit 1
