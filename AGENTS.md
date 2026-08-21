@@ -6,7 +6,7 @@
 **License**: MIT License
 **Version**: 0.5.0
 **Python**: >=3.11 (supports 3.11, 3.12, 3.13, 3.14)
-**Last Updated**: 2026-08-08
+**Last Updated**: 2026-08-21
 
 ---
 
@@ -538,6 +538,42 @@ Symbol scope is `juniper_cascor_worker/**/*.py` + `tests/**/*.py` (the worker's 
 | detect-private-key | Blocks committed private keys |
 
 ---
+
+### PR base-branch guard (required check)
+
+`.github/workflows/pr-base-branch-guard.yml` fails any PR whose base branch is not the
+default branch. Its job name -- **`Guard PR base branch`** -- is a **required status check**
+in this repo's ruleset, so renaming the job or deleting the file makes `main` unmergeable
+until the context is un-required first.
+
+**What it protects against.** A PR based on another feature branch can squash-merge into
+that branch, stranding its content off `main` behind a green **MERGED** badge. It has
+happened three times in this ecosystem (`juniper-recurrence#7`/`#8`, `juniper-canopy#365`).
+
+**Why it matters more than it looks.** Both rulesets here are scoped to `~DEFAULT_BRANCH`, so
+a PR whose base is a feature branch is governed by **no ruleset at all** -- it has zero
+required status checks and merges clean with nothing having run:
+
+```bash
+gh api repos/pcalnon/<repo>/rules/branches/feature%2Fanything --jq length   # -> 0
+gh api repos/pcalnon/<repo>/rules/branches/main               --jq length   # -> 9
+```
+
+This workflow carries no `branches:` filter, so it is the **only** check that runs on such a
+PR. It cannot block the merge there -- no ruleset applies -- but it turns a silent merge into
+a visibly red one.
+
+**If it fails.** Re-open the work against the default branch. The house practice is
+**close and re-open** a fresh PR titled `[retarget #NNN]`. Retargeting in place is *not*
+sufficient on its own: every `ci*.yml` here uses the default `pull_request` types
+`[opened, synchronize, reopened]`, which exclude `edited`, so a retarget re-runs this guard
+and nothing else -- the PR stays blocked on its other required contexts until a push or a
+close/re-open.
+
+**`stacked-pr` label.** Silences this guard for a deliberate stack. It does **not** make the
+PR mergeable into `main`, and it does **not** re-land the stack -- do that separately.
+
+Rollout and rationale: [juniper-ml#434](https://github.com/pcalnon/juniper-ml/issues/434).
 
 ## Resource Locations
 
