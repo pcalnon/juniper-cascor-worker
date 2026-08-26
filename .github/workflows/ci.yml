@@ -760,6 +760,77 @@ jobs:
           PY
 
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
+  # Memory Budget (ADVISORY, standalone): P5 port of juniper-ml's size ratchet.
+  # Plan: juniper-ml notes/JUNIPER_2026-08-18_JUNIPER-ML_SHARED-SESSION-MEMORY-PLAN.md (§P5);
+  # tracking issue juniper-ml#1326. Rendered by juniper-ml's
+  # util/ad-hoc/2026-08-25_p5_port_memory_budget.py from figures measured IN THIS REPO on
+  # 2026-08-25 -- re-measure, never transcribe.
+  #
+  # WHY THE RATE AXIS SHIPS FIRST, AND ALONE. juniper-ml's AGENTS.md grew ~20x in six months
+  # WHILE UNDER FOUR ACTIVE CI GATES -- every one of them enforced structure or currency and
+  # none enforced SIZE; 172 of 200 main-line merges grew it against 14 that shrank it, by 2,628
+  # bytes between them. A cut without a ceiling is undone in ~44 days, and a ceiling set AFTER a
+  # cut locks in the inflated level. So the ceiling lands first and the cut comes later; this job
+  # carries no relocation check yet, because juniper-cascor-worker has not cut anything to check.
+  #
+  # STANDALONE, and deliberately ABSENT from any Quality Gate `needs:` (plan correction C9). A
+  # `needs:` entry is the wrong promotion mechanism: it makes a skip on a non-PR event fail the
+  # gate. Promotion happens in the branch RULESET, the same way Sequence Safety was promoted --
+  # and only after the soak below, with `--advisory` removed and the three negative controls
+  # re-run against the non-advisory job.
+  #
+  # ADVISORY during the soak. `--advisory` reports and always exits 0. It is removed only after
+  # three negative controls pass in this repo -- clean tree exits 0, +500 chars exits 1, and a
+  # waiver trailer exits 0 -- because a blocking gate that cannot fail is worse than none.
+  #
+  # EXPECT A REPORTED VIOLATION. The ceiling was seeded at the exact size on the day this landed
+  # (35,126 chars; zero slack, by design). Over the 30 days to 2026-08-25 this repo's
+  # AGENTS.md went 33,144 -> 35,126 (+1,982, ~66 chars/day) across 2 commits
+  # touching it -- 1 grew it, 0 shrank it; median growing commit 1,982,
+  # largest 1,982. The first AGENTS.md-growing PR is SUPPOSED to report -- that is the soak
+  # measuring the burn, not a misconfiguration.
+  memory-budget:
+    name: Memory Budget
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Code (full history)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0 # need the base tip to apply the no-worsening rule
+
+      - name: Set up Python ${{ env.PYTHON_TEST_VERSION }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_TEST_VERSION }}
+
+      - name: Check memory-file size budget
+        run: |
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║  juniper-cascor-worker - Memory File Size Budget (ADVISORY)║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+          # The base is read from the event rather than hardcoded; merge_group has no
+          # github.base_ref, hence the fallback.
+          BASE_REF="${{ github.base_ref || 'main' }}"
+          git fetch --no-tags origin "$BASE_REF"
+          # Allow-Budget-Overrun is a LOAN, not a pass: it suppresses the failure without moving
+          # the ceiling, so the debt still blocks the next author. Trailers are injected from an
+          # explicit file (the checker never shells out for them) so the classifier stays pure.
+          # Two-dot FETCH_HEAD..HEAD = exactly the commits this PR adds on top of base.
+          git log --format=%B FETCH_HEAD..HEAD > memory-budget-trailers.txt
+          # `--advisory` is the SOAK setting and is removed to promote. Escape hatch once this
+          # blocks, when the growth is genuinely warranted: add the commit trailer
+          #   Allow-Budget-Overrun: AGENTS.md
+          # and carry it into the SQUASH message -- squash composes from the commit messages, so
+          # a trailer left only in the PR body is silently discarded.
+          python3 util/memory_budget_check.py \
+            --base-ref FETCH_HEAD \
+            --trailers-file memory-budget-trailers.txt \
+            --advisory
+
+  # ═══════════════════════════════════════════════════════════════════════════════════════════════
   # Required Checks Aggregator: Final quality gate
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   required-checks:
