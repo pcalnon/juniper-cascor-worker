@@ -39,8 +39,8 @@
   ],
   "files": {
     "AGENTS.md": {
-      "ceiling_chars": 35126,
-      "_note": "Seeded 2026-08-25 at the character count of AGENTS.md IN THIS REPO (rendered by juniper-ml's util/ad-hoc/2026-08-25_p5_port_memory_budget.py render-config; `python3 util/memory_budget_check.py --ratchet` run afterwards must report nothing to tighten). ZERO slack, deliberately: the ceiling starts at the size on the day the gate landed, so it is satisfiable immediately and governs only growth, and the job ships ADVISORY so a violation reports rather than blocks. At the measured ~66 chars/day a violation is expected soon -- that is the soak measuring the burn, not a misconfiguration. Before promoting to blocking, land a cut and ratchet, or hand-edit slack sized to a RE-MEASURED burn (>= 1,982 absorbs the largest single commit seen here)."
+      "ceiling_chars": 37126,
+      "_note": "Seeded 2026-08-25 at 35,126 chars, the size of AGENTS.md IN THIS REPO on the day the port landed (zero slack; the job shipped ADVISORY for the soak). RAISED 2026-08-26 to 37,126 (+2,000) under an Allow-Ceiling-Raise: AGENTS.md trailer when --advisory was removed (plan P5 step d): the slack is the largest single AGENTS.md-growing commit re-measured here over the 30 days to 2026-08-26 (max 1,982, median 1,982, ~66 chars/day), floored at 2,000 for the fleet-wide fan-out class that added 1,982 chars to six repos' AGENTS.md at once on 2026-08-21. Growth past the ceiling now FAILS the check; Allow-Budget-Overrun: AGENTS.md is the loan. After a cut, lower it by hand to a value with RE-MEASURED slack -- never bare --ratchet, which leaves zero headroom."
     }
   }
 }

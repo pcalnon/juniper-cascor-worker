@@ -760,7 +760,7 @@ jobs:
           PY
 
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
-  # Memory Budget (ADVISORY, standalone): P5 port of juniper-ml's size ratchet.
+  # Memory Budget (BLOCKING, standalone): P5 port of juniper-ml's size ratchet.
   # Plan: juniper-ml notes/JUNIPER_2026-08-18_JUNIPER-ML_SHARED-SESSION-MEMORY-PLAN.md (§P5);
   # tracking issue juniper-ml#1326. Rendered by juniper-ml's
   # util/ad-hoc/2026-08-25_p5_port_memory_budget.py from figures measured IN THIS REPO on
@@ -776,19 +776,24 @@ jobs:
   # STANDALONE, and deliberately ABSENT from any Quality Gate `needs:` (plan correction C9). A
   # `needs:` entry is the wrong promotion mechanism: it makes a skip on a non-PR event fail the
   # gate. Promotion happens in the branch RULESET, the same way Sequence Safety was promoted --
-  # and only after the soak below, with `--advisory` removed and the three negative controls
-  # re-run against the non-advisory job.
+  # and only after the soak below -- which ended 2026-08-26: `--advisory` is gone and the three
+  # negative controls were re-run against the non-advisory job (plan §P5 step d).
   #
-  # ADVISORY during the soak. `--advisory` reports and always exits 0. It is removed only after
-  # three negative controls pass in this repo -- clean tree exits 0, +500 chars exits 1, and a
-  # waiver trailer exits 0 -- because a blocking gate that cannot fail is worse than none.
+  # BLOCKING as of 2026-08-26 (plan §P5 step d). The job soaked with `--advisory` from the port's merge,
+  # and the flag was removed only after three negative controls passed IN THIS REPO against the
+  # non-advisory invocation -- clean tree exits 0, growth past the ceiling exits 1, and a waiver
+  # trailer exits 0 -- because a blocking gate that cannot fail is worse than none. Whether this
+  # context is REQUIRED is decided in the branch ruleset, never here.
   #
-  # EXPECT A REPORTED VIOLATION. The ceiling was seeded at the exact size on the day this landed
-  # (35,126 chars; zero slack, by design). Over the 30 days to 2026-08-25 this repo's
-  # AGENTS.md went 33,144 -> 35,126 (+1,982, ~66 chars/day) across 2 commits
-  # touching it -- 1 grew it, 0 shrank it; median growing commit 1,982,
-  # largest 1,982. The first AGENTS.md-growing PR is SUPPOSED to report -- that is the soak
-  # measuring the burn, not a misconfiguration.
+  # SLACK, MEASURED HERE. The ceiling was seeded at the exact size on the day the port landed
+  # (35,126 chars, zero slack) and raised 2026-08-26 to 37,126 (+2,000) under an Allow-Ceiling-
+  # Raise: AGENTS.md trailer. The slack is the largest single AGENTS.md-growing commit re-measured
+  # over the 30 days to 2026-08-26 (1,982; median 1,982, 1 grew / 0 shrank, ~66 chars/day),
+  # floored at 2,000 because one fleet-wide docs fan-out (2026-08-21) added 1,982 chars to six
+  # repos' AGENTS.md at once -- the shape a zero-slack ceiling cannot absorb. Growth past the
+  # ceiling now FAILS this check; Allow-Budget-Overrun: AGENTS.md is the loan for a warranted
+  # overrun, and a cut is what brings the ceiling back down (hand-edit with slack, never bare
+  # --ratchet).
   memory-budget:
     name: Memory Budget
     runs-on: ubuntu-latest
@@ -809,7 +814,7 @@ jobs:
       - name: Check memory-file size budget
         run: |
           echo "╔════════════════════════════════════════════════════════════╗"
-          echo "║  juniper-cascor-worker - Memory File Size Budget (ADVISORY)║"
+          echo "║  juniper-cascor-worker - Memory File Size Budget (BLOCKING)║"
           echo "╚════════════════════════════════════════════════════════════╝"
           # The base is read from the event rather than hardcoded; merge_group has no
           # github.base_ref, hence the fallback.
@@ -820,15 +825,14 @@ jobs:
           # explicit file (the checker never shells out for them) so the classifier stays pure.
           # Two-dot FETCH_HEAD..HEAD = exactly the commits this PR adds on top of base.
           git log --format=%B FETCH_HEAD..HEAD > memory-budget-trailers.txt
-          # `--advisory` is the SOAK setting and is removed to promote. Escape hatch once this
-          # blocks, when the growth is genuinely warranted: add the commit trailer
+          # BLOCKING as of 2026-08-26: `--advisory` (the soak setting) is gone, so a violation exits 1 and
+          # fails this check. Escape hatch, when the growth is genuinely warranted: add the commit trailer
           #   Allow-Budget-Overrun: AGENTS.md
           # and carry it into the SQUASH message -- squash composes from the commit messages, so
           # a trailer left only in the PR body is silently discarded.
           python3 util/memory_budget_check.py \
             --base-ref FETCH_HEAD \
-            --trailers-file memory-budget-trailers.txt \
-            --advisory
+            --trailers-file memory-budget-trailers.txt
 
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   # Required Checks Aggregator: Final quality gate
