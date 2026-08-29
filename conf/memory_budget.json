@@ -39,8 +39,9 @@
   ],
   "files": {
     "AGENTS.md": {
-      "ceiling_chars": 37126,
+      "ceiling_chars": 26832,
       "_note": "Seeded 2026-08-25 at 35,126 chars, the size of AGENTS.md IN THIS REPO on the day the port landed (zero slack; the job shipped ADVISORY for the soak). RAISED 2026-08-26 to 37,126 (+2,000) under an Allow-Ceiling-Raise: AGENTS.md trailer when --advisory was removed (plan P5 step d): the slack is the largest single AGENTS.md-growing commit re-measured here over the 30 days to 2026-08-26 (max 1,982, median 1,982, ~66 chars/day), floored at 2,000 for the fleet-wide fan-out class that added 1,982 chars to six repos' AGENTS.md at once on 2026-08-21. Growth past the ceiling now FAILS the check; Allow-Budget-Overrun: AGENTS.md is the loan. After a cut, lower it by hand to a value with RE-MEASURED slack -- never bare --ratchet, which leaves zero headroom."
     }
-  }
+  },
+  "_note": "P5 step e (the cut): AGENTS.md relocated to docs/REFERENCE.md verbatim, 24,832 chars remaining. Ceiling lowered 37,126 -> 26,832 = size + 2,000 slack, where slack is max(largest single 30-day growing commit, 2,000 fleet fan-out floor). Set by hand, NOT by --ratchet: run straight after a cut --ratchet leaves zero headroom and fails the next author on one character. Re-measured 2026-08-29."
 }
