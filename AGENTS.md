@@ -6,9 +6,26 @@
 **License**: MIT License
 **Version**: 0.5.0
 **Python**: >=3.11 (supports 3.11, 3.12, 3.13, 3.14)
-**Last Updated**: 2026-08-29
+**Last Updated**: 2026-08-30
 
 ---
+
+## Hazards (resident — do not relocate)
+
+Directives whose **non-application destroys work**. Everything else in this file may be demoted to
+`docs/REFERENCE.md` under the memory budget; these may not, because a pointer only helps an agent
+that already knows to look. Adding a new hazard here is legitimate — ratchet space out of a
+reference section in the same PR rather than waiving the budget gate.
+
+- **Re-run the cross-repo bit-identity check before merging a wire-protocol change.** When the
+  cascor server changes the protocol: update the constant in `constants.py` first, then the
+  consumers (`worker.py`, `task_executor.py`, `ws_connection.py`), then re-run the check — **a
+  mismatch silently breaks worker connectivity**. Nothing in either repo's tests catches it, because
+  each side is internally consistent. Full rationale: § Constants.
+- **`/tmp/` is prohibited** as the home for any script that produces, modifies or analyzes
+  repository content — it is reaped when sessions, sandboxes or containers end, and the scripts are
+  irrecoverable. Scratch *data* there is fine; source files are not. Permanent utilities live in
+  `util/`, single-use ones in `util/ad-hoc/`. Full rule: § Script Placement.
 
 ## Quick Reference
 
