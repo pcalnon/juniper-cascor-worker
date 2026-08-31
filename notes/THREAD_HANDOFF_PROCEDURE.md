@@ -79,7 +79,30 @@ Key context:
 - **Include file paths**: The new thread doesn't know what you've been looking at
 - **State decisions made**: So the new thread doesn't re-litigate them
 - **Mention test status**: If tests were run, state pass/fail counts
-- **Keep it under ~500 words**: Dense signal, no filler
+- **Keep it under ~1,200 words**: Dense signal, no filler
+
+> **On the ~1,200 figure — amended 2026-08-30, previously ~500.**
+>
+> Measured across juniper-ml's 148 archived handoffs
+> (`util/ad-hoc/2026-08-30_handoff_length_census.py`): prose median **1,150** words, **1,270**
+> including fenced blocks, **IQR 778–2,718**. Only **18 of 148** met the old ~500. This repo did
+> not run its own census; the figure is adopted from juniper-ml, which is canonical for the
+> procedure.
+>
+> Three things the figure is **not**:
+>
+> - **Not a description.** It is a target, set near the median so the rule is reachable — not so
+>   it is automatically satisfied.
+> - **Not one population.** Handoffs carrying the mandatory independent-validation apparatus
+>   occupy the top quarter by length for reasons unrelated to writing discipline. Treat the
+>   **IQR as the real guidance** and the median as a midpoint.
+> - **Not the whole document.** This rule governs the **goal statement** above, not the whole
+>   archived handoff, which now carries sections the original four-part template never scoped
+>   (verification commands, traps, validation results). The measured figures are therefore an
+>   *upper bound* on what the goal statement itself should run to.
+>
+> Canonical text: juniper-ml
+> `notes/JUNIPER_2026-02-23_JUNIPER-ML_THREAD-HANDOFF-PROCEDURE.md` (ml#1505).
 
 ### Step 3: Execute the Handoff
 
