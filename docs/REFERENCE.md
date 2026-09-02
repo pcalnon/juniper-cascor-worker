@@ -173,6 +173,41 @@ from juniper_cascor_worker import (
 
 ---
 
+## Project Overview Reference
+
+Relocated verbatim from `AGENTS.md` (P3 of the shared-session-memory plan) so it is read on demand rather than loaded into every session.
+
+`juniper-cascor-worker` is a distributed candidate training worker for the JuniperCascor neural network platform. It connects to a JuniperCascor training server and processes candidate training tasks on remote hardware.
+
+### Two Operating Modes
+
+- **WebSocket mode** (default, since 0.2.0): Connects via WebSocket to the `/ws/v1/workers` endpoint. Async, no pickle, JSON + binary tensor framing.
+- **Legacy mode** (deprecated since 0.3.0): Connects via Python's `multiprocessing.managers.BaseManager`. Emits `DeprecationWarning`.
+
+### Dependencies
+
+| Library | Version | Purpose |
+|---------|---------|---------|
+| `numpy` | `>=1.24.0` | Array operations, tensor encoding/decoding |
+| `torch` | `>=2.0.0` | Neural network activations, tensor operations |
+| `websockets` | `>=11.0` | Async WebSocket client |
+
+#### Dynamic Imports (Required on Worker Machine)
+
+The worker dynamically imports from the JuniperCascor source:
+
+| Import | Source | Used By |
+|--------|--------|---------|
+| `candidate_unit.candidate_unit.CandidateUnit` | juniper-cascor | `task_executor.py` |
+| `cascade_correlation.cascade_correlation.CandidateTrainingManager` | juniper-cascor | `worker.py` (legacy only) |
+| `cascade_correlation.cascade_correlation.CascadeCorrelationNetwork` | juniper-cascor | `worker.py` (legacy only) |
+
+The cascor source must be on `sys.path` via `--cascor-path <path>` CLI flag or pre-installed in the environment.
+
+---
+
+---
+
 ## Worker Lifecycle by Mode
 
 ### WebSocket Mode (Default)
@@ -522,6 +557,29 @@ juniper-cascor-worker [OPTIONS]
 
 - First `SIGINT`/`SIGTERM`: Graceful shutdown
 - Second `SIGINT`/`SIGTERM`: Forced exit (`sys.exit(1)`)
+
+---
+
+---
+
+## Resource Locations Reference
+
+Relocated verbatim from `AGENTS.md` (P3 of the shared-session-memory plan) so it is read on demand rather than loaded into every session.
+
+When working on this project, consult these resources based on task type:
+
+| Task | Resource |
+|------|----------|
+| API or CLI details | `docs/REFERENCE.md` |
+| Getting started / setup | `docs/QUICK_START.md` |
+| Common dev tasks | `docs/DEVELOPER_CHEATSHEET.md` |
+| Doc navigation | `docs/DOCUMENTATION_OVERVIEW.md` |
+| Creating a worktree | `notes/WORKTREE_SETUP_PROCEDURE.md` |
+| Finishing a task | `notes/WORKTREE_CLEANUP_PROCEDURE_V2.md` |
+| Thread handoff | `notes/THREAD_HANDOFF_PROCEDURE.md` |
+| Pre-commit issues | `notes/PRE_COMMIT_REMEDIATION_PLAN.md` |
+| Non-pip dependencies | `notes/juniper-cascor-worker_OTHER_DEPENDENCIES.md` |
+| Full project context | `/home/pcalnon/Development/python/Juniper/CLAUDE.md` |
 
 ---
 

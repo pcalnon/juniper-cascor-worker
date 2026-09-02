@@ -6,7 +6,7 @@
 **License**: MIT License
 **Version**: 0.5.0
 **Python**: >=3.11 (supports 3.11, 3.12, 3.13, 3.14)
-**Last Updated**: 2026-08-30
+**Last Updated**: 2026-09-01
 
 ---
 
@@ -153,34 +153,7 @@ Pre-CFG-06 deployments using the bare `CASCOR_*` (or partial-scope `CASCOR_WORKE
 
 ## Project Overview
 
-`juniper-cascor-worker` is a distributed candidate training worker for the JuniperCascor neural network platform. It connects to a JuniperCascor training server and processes candidate training tasks on remote hardware.
-
-### Two Operating Modes
-
-- **WebSocket mode** (default, since 0.2.0): Connects via WebSocket to the `/ws/v1/workers` endpoint. Async, no pickle, JSON + binary tensor framing.
-- **Legacy mode** (deprecated since 0.3.0): Connects via Python's `multiprocessing.managers.BaseManager`. Emits `DeprecationWarning`.
-
-### Dependencies
-
-| Library | Version | Purpose |
-|---------|---------|---------|
-| `numpy` | `>=1.24.0` | Array operations, tensor encoding/decoding |
-| `torch` | `>=2.0.0` | Neural network activations, tensor operations |
-| `websockets` | `>=11.0` | Async WebSocket client |
-
-#### Dynamic Imports (Required on Worker Machine)
-
-The worker dynamically imports from the JuniperCascor source:
-
-| Import | Source | Used By |
-|--------|--------|---------|
-| `candidate_unit.candidate_unit.CandidateUnit` | juniper-cascor | `task_executor.py` |
-| `cascade_correlation.cascade_correlation.CandidateTrainingManager` | juniper-cascor | `worker.py` (legacy only) |
-| `cascade_correlation.cascade_correlation.CascadeCorrelationNetwork` | juniper-cascor | `worker.py` (legacy only) |
-
-The cascor source must be on `sys.path` via `--cascor-path <path>` CLI flag or pre-installed in the environment.
-
----
+What the worker is, its two operating modes, dependencies, and the dynamic imports it needs from the cascor source. Moved to [`docs/REFERENCE.md` § Project Overview Reference](docs/REFERENCE.md#project-overview-reference) — read it when working on this area.
 
 ## Application Architecture
 
@@ -340,22 +313,7 @@ Rollout and rationale: [juniper-ml#434](https://github.com/pcalnon/juniper-ml/is
 
 ## Resource Locations
 
-When working on this project, consult these resources based on task type:
-
-| Task | Resource |
-|------|----------|
-| API or CLI details | `docs/REFERENCE.md` |
-| Getting started / setup | `docs/QUICK_START.md` |
-| Common dev tasks | `docs/DEVELOPER_CHEATSHEET.md` |
-| Doc navigation | `docs/DOCUMENTATION_OVERVIEW.md` |
-| Creating a worktree | `notes/WORKTREE_SETUP_PROCEDURE.md` |
-| Finishing a task | `notes/WORKTREE_CLEANUP_PROCEDURE_V2.md` |
-| Thread handoff | `notes/THREAD_HANDOFF_PROCEDURE.md` |
-| Pre-commit issues | `notes/PRE_COMMIT_REMEDIATION_PLAN.md` |
-| Non-pip dependencies | `notes/juniper-cascor-worker_OTHER_DEPENDENCIES.md` |
-| Full project context | `/home/pcalnon/Development/python/Juniper/CLAUDE.md` |
-
----
+Task-to-document routing table: which doc or note to consult for each kind of task. Moved to [`docs/REFERENCE.md` § Resource Locations Reference](docs/REFERENCE.md#resource-locations-reference) — read it when working on this area.
 
 ## Ecosystem Context
 
