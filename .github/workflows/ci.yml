@@ -585,8 +585,20 @@ jobs:
           # to PYSEC-2025-49) and torch hard-pins setuptools<82, so the freeze captures
           # the vulnerable version. We replace the exact pin with a >= constraint below
           # so pip-audit's resolver picks a non-vulnerable version in [78.1.1, 82).
-          pip freeze | grep -ivE "^juniper[-_]cascor[-_]worker|^setuptools==" | sed 's/+cpu//' > reports/security/requirements.txt
+          #
+          # TORCH GETS THE SAME >= TREATMENT, and for a closely related reason (2026-09-01).
+          # The CPU wheel index PUBLISHES AHEAD OF PyPI: it served torch 2.14.0+cpu while
+          # PyPI's newest was 2.13.0. Stripping "+cpu" then produced an exact pin
+          # `torch==2.14.0` that does not exist on PyPI, pip-audit's isolated resolver died
+          # with "No matching distribution found for torch==2.14.0", and NO AUDIT RAN.
+          # Because the pin floats with whatever the CPU index last published, this breaks
+          # on its own schedule with no repo change — worker CI went red on a docs-only PR.
+          # A `>=` constraint (matching pyproject's own floor) lets the resolver pick the
+          # newest torch PyPI actually has. Same fidelity trade already accepted for
+          # setuptools: we audit a resolvable version rather than auditing nothing.
+          pip freeze | grep -ivE "^juniper[-_]cascor[-_]worker|^setuptools==|^torch==" | sed 's/+cpu//' > reports/security/requirements.txt
           echo "setuptools>=78.1.1" >> reports/security/requirements.txt
+          echo "torch>=2.10.0" >> reports/security/requirements.txt
           # ──────────────────────────────────────────────────────────────────────
           # Suppress 11 PyTorch advisories that pip-audit reports against torch
           # 2.12.0+cpu (and earlier 2.5–2.10 lineage) with **no fix versions
@@ -618,7 +630,13 @@ jobs:
           # Tracking note: when adding/removing IDs, also update
           # juniper-cascor's analogous block (kept in sync).
           # ──────────────────────────────────────────────────────────────────────
-          pip-audit -r reports/security/requirements.txt --strict --desc on \
+          # A NON-ZERO EXIT HERE HAS TWO VERY DIFFERENT CAUSES, and conflating them cost a
+          # real diagnosis on 2026-09-01: the old `|| echo "::error::Critical/High
+          # vulnerabilities found"` fired on ANY failure, so a resolver crash that ran NO
+          # audit at all was reported as a security finding. A reader then hunts for a CVE
+          # that does not exist. Distinguish them: a scan that could not run is an
+          # infrastructure failure, not a clean bill of health AND not a vulnerability.
+          if pip-audit -r reports/security/requirements.txt --strict --desc on \
             --ignore-vuln PYSEC-2025-189 \
             --ignore-vuln PYSEC-2025-190 \
             --ignore-vuln PYSEC-2025-191 \
@@ -634,7 +652,17 @@ jobs:
             --ignore-vuln CVE-2025-2149 \
             --ignore-vuln CVE-2025-2998 \
             --ignore-vuln CVE-2025-3000 \
-            || (echo "::error::Critical/High vulnerabilities found in dependencies" && exit 1)
+            > reports/security/pip-audit.log 2>&1; then
+            cat reports/security/pip-audit.log
+          else
+            cat reports/security/pip-audit.log
+            if grep -qE "Failed to install packages|No matching distribution|internal pip failure|Could not find a version" reports/security/pip-audit.log; then
+              echo "::error::pip-audit COULD NOT RUN — dependency resolution failed, so NO audit was performed. This is an infrastructure failure, NOT a vulnerability finding. Check whether an index published a version PyPI does not have (see the torch >= note above)."
+            else
+              echo "::error::Critical/High vulnerabilities found in dependencies"
+            fi
+            exit 1
+          fi
 
       - name: Upload Security Reports
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
