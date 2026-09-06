@@ -138,17 +138,44 @@ jobs:
       # Push BY DIGEST, not by tag. Two jobs pushing the same tag would race and the
       # second would silently win, leaving a single-arch image wearing a multi-arch tag.
       # Tags are applied exactly once, by the merge job, after both digests exist.
-      - name: Build ${{ matrix.platform }}
+      # ── Two build steps, deliberately, rather than one with conditional inputs ──────────
+      #
+      # The publish and validation paths need OPPOSITE `tags` handling, and expressing that
+      # as `${{ cond && '' || 'worker-smoke:x' }}` is a trap: GitHub's `&&`/`||` idiom is
+      # only a ternary when the true-branch value is TRUTHY, and `''` is falsy -- so the
+      # `||` falls through and the publish path gets a tag anyway. That is precisely the
+      # bug being fixed here, so it must not be reintroduced in a subtler disguise.
+      # Two `if`-gated steps cost a few duplicated lines and cannot express the wrong thing.
+
+      # Publish: push BY DIGEST with NO tag. buildx rejects a tagged ref on a digest push
+      # ("can't push tagged ref docker.io/library/worker-smoke:amd64 by digest") because a
+      # digest push has no tag by definition. Every tag is applied once, by the merge job.
+      - name: Build and push ${{ matrix.platform }}
         id: build
+        if: github.event_name == 'release' || inputs.push
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          # Publish path: push by digest, tagged later by the merge job.
-          # Build-only path: `type=docker` LOADS the image into this runner's daemon so the
-          # smoke test below runs the artifact that was just built, rather than rebuilding it.
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ steps.prov.outputs.build_date }}
+            APP_VERSION=${{ steps.prov.outputs.app_version }}
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+
+      # Validation: `type=docker` LOADS the image into this runner's daemon, which REQUIRES
+      # a tag to address it, so the smoke test runs the artifact just built rather than
+      # rebuilding it. Nothing is pushed and no registry credential is present.
+      - name: Build ${{ matrix.platform }} (validation only)
+        if: github.event_name != 'release' && !inputs.push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
           tags: worker-smoke:${{ matrix.arch }}
-          outputs: ${{ (github.event_name == 'release' || inputs.push) && format('type=image,name={0}/{1},push-by-digest=true,name-canonical=true,push=true', env.REGISTRY, env.IMAGE_NAME) || 'type=docker' }}
+          outputs: type=docker
           build-args: |
             GIT_SHA=${{ github.sha }}
             BUILD_DATE=${{ steps.prov.outputs.build_date }}
@@ -282,7 +309,16 @@ jobs:
       # inspect it and fail loudly if an arch is missing, rather than discovering it on a Pi.
       - name: Verify both architectures are present
         run: |
-          ref="${REGISTRY}/${IMAGE_NAME}:${{ steps.meta.outputs.version }}"
+          # Inspect a tag we KNOW was applied -- the first entry of the metadata action's
+          # own tag list -- rather than `steps.meta.outputs.version`, which is derived by
+          # separate rules and is empty for some event/tag-rule combinations. Verifying a
+          # ref that was never created would fail for the wrong reason and read as a
+          # missing architecture.
+          ref="$(jq -r '.tags[0]' <<< "${DOCKER_METADATA_OUTPUT_JSON}")"
+          if [ -z "${ref}" ] || [ "${ref}" = "null" ]; then
+            echo "::error::no tag to verify -- metadata-action produced an empty tag list"
+            exit 1
+          fi
           echo "inspecting ${ref}"
           docker buildx imagetools inspect "${ref}" --format '{{ json .Manifest }}' > /tmp/manifest.json
           arches="$(jq -r '[.manifests[]?.platform | select(.os=="linux") | .architecture] | sort | join(",")' /tmp/manifest.json)"
