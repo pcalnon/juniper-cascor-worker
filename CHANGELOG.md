@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The container image shipped CUDA torch (`2.12.1+cu130`) plus the full `nvidia-*` /
+  `triton` stack -- 2.9 GB -- despite being designed CPU-only.** `Dockerfile` installed torch
+  *unpinned* from the PyTorch CPU index and then installed `requirements-cpu.lock` with **no
+  index flags**. The lock excludes torch (`--no-emit-package torch`) but pins torch's
+  transitive deps for the 2.12.0 it was compiled against (`setuptools==70.2.0`), so the
+  newest CPU wheel (2.14.0, which needs `setuptools>=77.0.3`) was rejected as inconsistent
+  and pip re-resolved torch **from PyPI only** -- the CUDA build, which drags in the NVIDIA
+  stack. Now `ARG TORCH_VERSION` pins torch to the lock header's `+cpu` version in **both**
+  installs, the lock install carries `--extra-index-url https://download.pytorch.org/whl/cpu`
+  (not `--index-url`: the CPU index 403s `pydantic` and `websockets`), and `pip check` gates
+  the builder. `util/check_image_cpu_only.py` asserts the contract *inside* the image --
+  exactly the pinned `+cpu` version, `torch.version.cuda is None`, and **no** `nvidia-*` /
+  `triton` distribution (the census defeats the vacuous "install the CPU wheel last" fix,
+  which swaps `torch` and leaves the orphaned CUDA wheels in place) -- on the PR smoke test
+  **and** on the publish path: per arch, by digest, before any tag is written, then against
+  the tag in the merge job. `publish-image.yml` also fails a release that produced no `X.Y.Z`
+  image tag, which `docker/metadata-action` otherwise only warns about. Pinned by
+  `tests/test_dockerfile_cpu_torch_pin.py`. Context: juniper-ml
+  `prompts/thread-handoff_automated-prompts/HANDOFF_2026-09-07_container-registry-rollout-wave-1-complete.md`
+  item 1.
+
 ## [0.5.0] - 2026-07-23
 
 ### Added
