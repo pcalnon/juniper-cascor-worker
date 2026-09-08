@@ -16,22 +16,42 @@ WORKDIR /build
 # Install build tools
 RUN pip install --no-cache-dir --upgrade pip wheel setuptools
 
-# CW-02 (Phase 4E): use the CPU-only lock to keep the runtime image slim.
-# requirements-cpu.lock excludes torch (we install the CPU wheel separately
-# from the PyTorch CPU index below) and the entire NVIDIA/CUDA transitive
-# stack that ``requirements.lock`` pins for GPU dev environments — saving
-# ~2-4 GB of image bloat. The companion ``requirements.lock`` is preserved
-# for non-Docker developer installs that may want full GPU support.
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+# CW-02 (Phase 4E): the CPU-only lock keeps the runtime image slim. requirements-cpu.lock
+# is compiled with ``--no-emit-package torch`` and an ``--override torch==X.Y.Z+cpu`` (its
+# header carries the exact recipe), so torch is installed here, separately, from the
+# PyTorch CPU index. Two rules make that actually CPU-only, and both were missing when
+# the 2026-09-07 image shipped torch 2.12.1+cu130 plus the whole nvidia-*/triton stack
+# (3 GB per Raspberry Pi node):
+#
+#   1. PIN torch to the lock header's ``+cpu`` version. The lock's torch-derived pins
+#      (setuptools==70.2.0, sympy, networkx, ...) are only consistent with THAT torch;
+#      an unpinned install gets the newest CPU wheel, and when its requirements disagree
+#      (torch>=2.13 needs setuptools>=77) the next pip install re-resolves torch.
+#   2. Give the lock install the CPU index too, and the same pin. pip only searches the
+#      indexes it is given, so without this a re-resolution can only find the CUDA build
+#      on PyPI; with it, torch can only ever be the +cpu wheel, and a genuine conflict
+#      fails the build instead of silently swapping the stack.
+#
+# ``--extra-index-url`` and not ``--index-url`` on the lock install: the CPU index serves
+# torch and a few of its deps but 403s the rest of the lock (pydantic, websockets), so
+# REPLACING the default index breaks the build. Keep ARG TORCH_VERSION equal to the lock
+# header's override -- tests/test_dockerfile_cpu_torch_pin.py fails otherwise, and
+# util/check_image_cpu_only.py asserts the built image inside the publish workflow. The
+# companion ``requirements.lock`` (full NVIDIA stack) remains for non-Docker GPU dev installs.
+ARG TORCH_VERSION=2.12.0
+ARG TORCH_CPU_INDEX=https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir "torch==${TORCH_VERSION}+cpu" --index-url "${TORCH_CPU_INDEX}"
 
 # Install pinned dependencies from lockfile (best layer caching)
 COPY requirements-cpu.lock ./
-RUN pip install --no-cache-dir -r requirements-cpu.lock
+RUN pip install --no-cache-dir --extra-index-url "${TORCH_CPU_INDEX}" "torch==${TORCH_VERSION}+cpu" -r requirements-cpu.lock
 
-# Copy project files and install without deps (already installed above)
+# Copy project files and install without deps (already installed above), then prove the
+# installed set is mutually consistent: a re-resolved, missing or conflicting dependency
+# fails HERE, at build time, rather than on a Pi at import time.
 COPY pyproject.toml README.md LICENSE ./
 COPY juniper_cascor_worker/ ./juniper_cascor_worker/
-RUN pip install --no-cache-dir --no-deps .
+RUN pip install --no-cache-dir --no-deps . && pip check
 
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime — Minimal production image

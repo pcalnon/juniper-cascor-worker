@@ -47,6 +47,15 @@
 #    ``packages: write``. There is no secret to provision, leak, or rotate. (Docker Hub is
 #    a deliberate phase 2 and DOES need a stored token -- it is not in this file.)
 #
+#    THE CPU-ONLY CONTRACT IS ASSERTED ON THE PATH THAT SHIPS, NOT ONLY ON THE PR. The first
+#    published image (dispatch-3d81f2c, 2026-09-07) was 3 GB and carried torch 2.12.1+cu130
+#    plus the nvidia-*/triton stack, because the Dockerfile's lock install re-resolved torch
+#    from PyPI. The PR smoke test never runs on a publish, so the check that would have
+#    caught it could not run where it mattered. ``util/check_image_cpu_only.py`` therefore
+#    runs three times: in the PR smoke test, in each arch's build job against the digest it
+#    just pushed (BEFORE the digest is handed to the merge job, so a failing arch means no
+#    tag is ever written), and in the merge job against the tag a consumer pulls.
+#
 #    Related: juniper-ml notes/JUNIPER_2026-09-05_JUNIPER-ECOSYSTEM_CONTAINER-REGISTRY-PUBLISHING-PLAN.md
 #####################################################################################################################################################################################################
 
@@ -64,6 +73,7 @@ on:
       - "requirements-cpu.lock"
       - "pyproject.toml"
       - "juniper_cascor_worker/**"
+      - "util/check_image_cpu_only.py"
       - ".github/workflows/publish-image.yml"
   workflow_dispatch:
     inputs:
@@ -92,6 +102,13 @@ jobs:
   build:
     name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.runner }}
+    # Release-tag guard. This repo publishes one package under `v*` today, but a sibling
+    # package's release (`juniper-<something>-v*`) would also fire `release: published`,
+    # and `latest` below is gated on the EVENT, not the tag -- so an unguarded workflow
+    # would republish `:latest` from a release that is not this image's. Defensive here;
+    # load-bearing in the multi-package repos (cascor, recurrence) this file is the
+    # template for. PRs and dispatches are unaffected.
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
     strategy:
       fail-fast: false # one arch failing must not hide the other arch's result
       matrix:
@@ -121,6 +138,16 @@ jobs:
           echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_OUTPUT}"
           echo "  APP_VERSION = ${version}"
           echo "  GIT_SHA     = ${GITHUB_SHA}"
+          # The Dockerfile pins torch to the +cpu build of exactly this version; the smoke
+          # test and both publish-path checks assert the image really carries it and nothing
+          # from the CUDA stack. No pin means the CPU-only contract has nothing to check.
+          torch_version="$(sed -n 's/^ARG TORCH_VERSION=//p' Dockerfile | head -n1)"
+          if [ -z "${torch_version}" ]; then
+            echo "::error::Dockerfile declares no 'ARG TORCH_VERSION=<x.y.z>' -- the CPU-only contract has no pin to check"
+            exit 1
+          fi
+          echo "expect_torch=${torch_version}+cpu" >> "${GITHUB_OUTPUT}"
+          echo "  TORCH       = ${torch_version}+cpu"
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
@@ -204,11 +231,37 @@ jobs:
           docker run --rm --entrypoint python "${img}" -c \
             'import platform, torch, numpy, pydantic_core; print("machine:", platform.machine(), "| torch:", torch.__version__, "| numpy:", numpy.__version__, "| pydantic_core:", pydantic_core.__version__)'
 
+          # CPU-only contract: exactly the pinned +cpu torch, no CUDA runtime, and no
+          # nvidia-*/triton distribution anywhere in site-packages. The census matters:
+          # a version check alone passes the vacuous fix that installs the CPU wheel last
+          # and leaves the orphaned CUDA wheels behind (see util/check_image_cpu_only.py).
+          echo "--- CPU-only contract"
+          docker run --rm -i -e EXPECT_TORCH='${{ steps.prov.outputs.expect_torch }}' \
+            --entrypoint python "${img}" - < util/check_image_cpu_only.py
+
           # Also exercise the real entrypoint: importing the deps proves the wheels
           # resolved for this arch, but not that the installed console script runs.
           echo "--- entrypoint"
           docker run --rm "${img}" --help > /dev/null
           echo "    juniper-cascor-worker --help OK"
+
+      # The smoke test above never runs on a publish, so the CPU-only contract must ALSO be
+      # asserted on the path that ships. Pull the image just pushed -- by digest, on this
+      # same native arch -- and run the census against it. A failure fails this arch's job,
+      # the merge job is then skipped, and no tag is ever written: an untagged digest in the
+      # registry is inert, a tagged CUDA image is a 3 GB pull on every Pi node.
+      - name: Verify pushed image is CPU-only (publish runs)
+        if: github.event_name == 'release' || inputs.push
+        run: |
+          digest='${{ steps.build.outputs.digest }}'
+          if [ -z "${digest}" ]; then
+            echo "::error::build produced no digest -- nothing to verify"
+            exit 1
+          fi
+          ref="${REGISTRY}/${IMAGE_NAME}@${digest}"
+          echo "verifying ${ref} on ${{ matrix.platform }}"
+          docker run --rm -i -e EXPECT_TORCH='${{ steps.prov.outputs.expect_torch }}' \
+            --entrypoint python "${ref}" - < util/check_image_cpu_only.py
 
       - name: Export digest
         if: github.event_name == 'release' || inputs.push
@@ -241,9 +294,14 @@ jobs:
     name: Publish manifest
     runs-on: ubuntu-24.04
     needs: [build]
-    if: github.event_name == 'release' || inputs.push
+    if: (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v')) || inputs.push
 
     steps:
+      # The merge job needs the repo for two files: the Dockerfile (the torch pin the
+      # published image is checked against) and util/check_image_cpu_only.py (the check).
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Download digests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -328,3 +386,46 @@ jobs:
             exit 1
           fi
           echo "::notice::published ${ref} for linux/amd64 + linux/arm64"
+
+      # On a release the semver rules MUST have produced the X.Y.Z tag. metadata-action only
+      # WARNS when a tag does not parse (meta.ts: core.warning + return, never setFailed), and
+      # `latest` still fires on the release event -- so without this check a release whose
+      # tag the rules did not match would publish `:latest` with no version tag, pass the
+      # zero-tag guard above with exactly one tag, and read SUCCESS.
+      - name: Verify the release produced a version tag
+        if: github.event_name == 'release'
+        run: |
+          versioned="$(jq -r '[.tags[] | select(test(":[0-9]+\\.[0-9]+\\.[0-9]+$"))] | length' <<< "${DOCKER_METADATA_OUTPUT_JSON}")"
+          if [ "${versioned}" -eq 0 ]; then
+            echo "::error::release '${{ github.event.release.tag_name }}' produced no X.Y.Z image tag -- the semver rules did not match it; tags: $(jq -c '.tags' <<< "${DOCKER_METADATA_OUTPUT_JSON}")"
+            exit 1
+          fi
+          echo "  version tag present ($(jq -c '.tags' <<< "${DOCKER_METADATA_OUTPUT_JSON}"))"
+
+      # Each arch's build job already ran the CPU-only check against the DIGEST it pushed.
+      # This closes the loop on the TAG a consumer actually pulls: the manifest list must
+      # reference exactly the digests that were verified (so nothing unverified can hide
+      # under the tag), and the amd64 image behind the tag is pulled and checked natively
+      # on this runner. arm64 is covered by the digest identity -- no QEMU here, by design.
+      - name: Verify published image is CPU-only
+        run: |
+          ref="$(jq -r '.tags[0]' <<< "${DOCKER_METADATA_OUTPUT_JSON}")"
+          torch_version="$(sed -n 's/^ARG TORCH_VERSION=//p' Dockerfile | head -n1)"
+          if [ -z "${torch_version}" ]; then
+            echo "::error::Dockerfile declares no 'ARG TORCH_VERSION=<x.y.z>' -- the CPU-only contract has no pin to check"
+            exit 1
+          fi
+
+          echo "--- digest identity"
+          listed="$(jq -r '[.manifests[]? | select(.platform.os=="linux") | .digest] | sort | join(" ")' /tmp/manifest.json)"
+          verified="$(cat /tmp/digests/* | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')"
+          if [ "${listed}" != "${verified}" ]; then
+            echo "::error::manifest list references [${listed}] but the verified build digests are [${verified}]"
+            exit 1
+          fi
+          echo "  ${ref} references exactly the verified digests"
+
+          echo "--- CPU-only contract (linux/amd64, native pull of ${ref})"
+          docker run --rm -i -e EXPECT_TORCH="${torch_version}+cpu" \
+            --entrypoint python "${ref}" - < util/check_image_cpu_only.py
+          echo "::notice::${ref} is CPU-only: torch ${torch_version}+cpu, no CUDA stack"

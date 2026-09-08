@@ -6,7 +6,7 @@
 **License**: MIT License
 **Version**: 0.5.0
 **Python**: >=3.11 (supports 3.11, 3.12, 3.13, 3.14)
-**Last Updated**: 2026-09-01
+**Last Updated**: 2026-09-08
 
 ---
 
@@ -26,6 +26,14 @@ reference section in the same PR rather than waiving the budget gate.
   repository content — it is reaped when sessions, sandboxes or containers end, and the scripts are
   irrecoverable. Scratch *data* there is fine; source files are not. Permanent utilities live in
   `util/`, single-use ones in `util/ad-hoc/`. Full rule: § Script Placement.
+- **The image is CPU-only by PIN, not by index: torch is pinned to `+cpu` in BOTH `Dockerfile`
+  installs, and the lock install carries `--extra-index-url` to the PyTorch CPU index.** An unpinned
+  CPU wheel whose own requirements disagree with `requirements-cpu.lock` (torch>=2.13 wants
+  setuptools>=77; the lock pins 70.2.0) is silently replaced by the **CUDA build from PyPI** on the
+  very next `pip install` -- 3 GB per Pi node, shipped 2026-09-07. Installing the CPU wheel *last* is
+  a vacuous fix (the orphaned `nvidia-*`/`triton` wheels stay). `util/check_image_cpu_only.py` asserts
+  the contract inside the image; `tests/test_dockerfile_cpu_torch_pin.py` pins Dockerfile ↔ lock ↔
+  workflow. Keep `ARG TORCH_VERSION` equal to the lock header's `--override`.
 
 ## Quick Reference
 
