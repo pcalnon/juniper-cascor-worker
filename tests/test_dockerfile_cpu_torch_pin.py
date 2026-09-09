@@ -174,6 +174,13 @@ class TestPublishWorkflowAssertsContract:
         assert "ARG TORCH_VERSION=" in step["run"]
         assert "/tmp/manifest.json" in step["run"] and "/tmp/digests" in step["run"], "digest identity between the manifest list and the verified digests must be asserted"
 
+    def test_identity_step_admits_one_linux_image_per_pushed_digest(self):
+        """A pushed per-arch digest names an OCI index; it must carry exactly one linux image, for the arch the census ran on (the digest file's name)."""
+        run = _step("merge", "Verify published image is CPU-only")["run"]
+        assert 'arch_file="$(basename "${f}")"' in run, "the expected arch is the digest file's name"
+        assert '"${image_arch}" != "${arch_file}"' in run, "the linux image's architecture must equal the digest file's name"
+        assert "-ne 1" in run, "exactly one linux image per pushed digest"
+
     def test_merge_job_requires_a_version_tag_on_release(self):
         step = _step("merge", "Verify the release produced a version tag")
         assert step["if"] == "github.event_name == 'release'"
@@ -200,9 +207,14 @@ class TestCheckImageCpuOnly:
 
     def test_census_flags_every_cuda_stack_distribution(self):
         mod = _load_check_module()
-        names = {"numpy", "nvidia-cublas", "nvidia_cudnn_cu13", "triton", "sympy"}
+        names = {"numpy", "nvidia-cublas", "nvidia_cudnn_cu13", "triton", "cuda-toolkit", "cuda_bindings", "sympy"}
         offenders = mod.forbidden_distributions({mod._normalise(n) for n in names})
-        assert offenders == ["nvidia-cublas", "nvidia-cudnn-cu13", "triton"]
+        assert offenders == ["cuda-bindings", "cuda-toolkit", "nvidia-cublas", "nvidia-cudnn-cu13", "triton"]
+
+    def test_census_forbids_the_cuda_prefix_family(self):
+        """The 2026-09-07 CUDA image also carried cuda-toolkit / cuda-bindings / cuda-pathfinder; the first census let those through."""
+        mod = _load_check_module()
+        assert mod.forbidden_distributions({"cuda-toolkit", "cuda-bindings", "cuda-pathfinder", "numpy"}) == ["cuda-bindings", "cuda-pathfinder", "cuda-toolkit"]
 
     def test_absent_contract_passes_only_without_torch(self, monkeypatch):
         mod = _load_check_module()
