@@ -269,10 +269,25 @@ jobs:
           # wheels (CI doesn't need CUDA); macOS finds its native wheels
           # via the default PyPI index — the CPU-only Linux index has
           # no macOS-arm64 wheels.
+          #
+          # PINNED to the version the container image ships (Dockerfile
+          # `ARG TORCH_VERSION`) so this suite tests the torch that actually
+          # reaches a Raspberry Pi. Unpinned, the gap re-opened on every
+          # PyTorch release: on 2026-09-08 CI tested 2.14.0 against an image
+          # that shipped 2.12.0. Reading the ARG rather than restating the
+          # version keeps one source of truth;
+          # tests/test_dockerfile_cpu_torch_pin.py asserts this step does so.
+          TORCH_VERSION="$(sed -n 's/^ARG TORCH_VERSION=//p' Dockerfile)"
+          if [ -z "${TORCH_VERSION}" ]; then
+            echo "::error::Dockerfile declares no ARG TORCH_VERSION — cannot pin CI to the shipped torch"
+            exit 1
+          fi
+          echo "::notice::Pinning torch to the image's ${TORCH_VERSION}"
           if [ "${{ runner.os }}" = "macOS" ]; then
-            pip install torch
+            # No +cpu wheels are published for macOS; pin the version only.
+            pip install "torch==${TORCH_VERSION}"
           else
-            pip install torch --index-url https://download.pytorch.org/whl/cpu
+            pip install "torch==${TORCH_VERSION}+cpu" --index-url https://download.pytorch.org/whl/cpu
           fi
           pip install -e ".[test]"
 

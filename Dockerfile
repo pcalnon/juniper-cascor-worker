@@ -24,7 +24,7 @@ RUN pip install --no-cache-dir --upgrade pip wheel setuptools
 # (3 GB per Raspberry Pi node):
 #
 #   1. PIN torch to the lock header's ``+cpu`` version. The lock's torch-derived pins
-#      (setuptools==70.2.0, sympy, networkx, ...) are only consistent with THAT torch;
+#      (setuptools, sympy, networkx, ...) are only consistent with THAT torch;
 #      an unpinned install gets the newest CPU wheel, and when its requirements disagree
 #      (torch>=2.13 needs setuptools>=77) the next pip install re-resolves torch.
 #   2. Give the lock install the CPU index too, and the same pin. pip only searches the
@@ -36,9 +36,16 @@ RUN pip install --no-cache-dir --upgrade pip wheel setuptools
 # torch and a few of its deps but 403s the rest of the lock (pydantic, websockets), so
 # REPLACING the default index breaks the build. Keep ARG TORCH_VERSION equal to the lock
 # header's override -- tests/test_dockerfile_cpu_torch_pin.py fails otherwise, and
-# util/check_image_cpu_only.py asserts the built image inside the publish workflow. The
-# companion ``requirements.lock`` (full NVIDIA stack) remains for non-Docker GPU dev installs.
-ARG TORCH_VERSION=2.12.0
+# util/check_image_cpu_only.py asserts the built image inside the publish workflow.
+#
+# The companion ``requirements.lock`` (full NVIDIA stack) remains for non-Docker GPU dev
+# installs, and requirements-cpu.lock is now DERIVED from it (``--constraint
+# requirements.lock``): the shared pins are equal by construction and the same test module
+# asserts that set equality. Before 2026-09-09 the CPU lock was an independent resolution
+# and had drifted from the GPU lock on 10 of 19 shared pins, because lockfile-update.yml
+# regenerates requirements.lock alone -- the CI checks are name-presence only, so nothing
+# went red. Bump ARG TORCH_VERSION and re-run the lock header's recipe together.
+ARG TORCH_VERSION=2.14.0
 ARG TORCH_CPU_INDEX=https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir "torch==${TORCH_VERSION}+cpu" --index-url "${TORCH_CPU_INDEX}"
 

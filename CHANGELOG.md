@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`requirements-cpu.lock` had drifted from `requirements.lock` on 10 of their 19 shared pins,
+  and the unit suite tested a torch the image does not ship.** Two halves of one problem: the CPU
+  lock was an *independent* resolution (no `--constraint`), and `lockfile-update.yml` regenerates
+  `requirements.lock` alone, so every dependency bump moved one lock and not the other --
+  `setuptools` 70.2.0 vs 83.0.0, `numpy` 2.4.4 vs 2.5.1, `websockets` 16.0 vs 16.1.1, `filelock`,
+  `fsspec`, `pydantic`, `pydantic-core`, `annotated-types`, `typing-extensions`, `typing-inspection`.
+  Nothing went red because both lock checks in `ci.yml` assert only that every `pyproject.toml`
+  dependency is **present** in the CPU lock, never that its version agrees with anything.
+  `requirements-cpu.lock` is now DERIVED from `requirements.lock` (`--constraint requirements.lock`,
+  plus `--index-strategy unsafe-best-match` so the constraint can be met from PyPI where the PyTorch
+  CPU index carries an older `setuptools`, and `--python-version 3.14` to match the image), making
+  the shared pins equal by construction; the recipe lives in the lock header.
+  `tests/test_dockerfile_cpu_torch_pin.py::test_cpu_lock_is_the_gpu_lock_minus_the_cuda_stack`
+  asserts that set equality, with `test_gpu_lock_still_pins_the_cuda_stack` guarding it against
+  going vacuous. Separately, `ci.yml`'s `unit-tests` job installed torch **unpinned** while the
+  image pins it, so the suite tested 2.14.0 against an image shipping 2.12.0; it now reads
+  `ARG TORCH_VERSION` out of the `Dockerfile` (one source of truth, asserted by two new tests)
+  and installs that version on both platform arms. `ARG TORCH_VERSION` itself moves 2.12.0 ->
+  2.14.0, so the image and CI now ship and test the same torch. Follow-up 6b of juniper-ml
+  `prompts/thread-handoff_automated-prompts/HANDOFF_2026-09-08_container-registry-rollout-wave-2-opened-and-the-cuda-class-in-three-shapes.md`;
+  this makes follow-up 6c's drift **detectable**, and 6c itself -- teaching `lockfile-update.yml`
+  to regenerate both locks -- lands separately.
 - **`util/check_image_cpu_only.py` let the `cuda-*` family through, and the merge job's
   digest-identity step accepted any number of linux images per pushed digest.** The 2026-09-07 CUDA
   image carried `cuda-toolkit`, `cuda-bindings` and `cuda-pathfinder` next to the `nvidia-*` wheels
