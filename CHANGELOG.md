@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`lockfile-update.yml` regenerated only `requirements.lock`, and committed it UNSIGNED.** Two
+  defects in one step. (1) The CPU lock is *derived* from the GPU lock (`--constraint`), so
+  regenerating one alone drifts the other -- which is exactly how the two came to differ on 10 of
+  their 19 shared pins (fixed in the entry below). The workflow now re-derives
+  `requirements-cpu.lock` immediately after the GPU regen, reading the torch pin from the
+  `Dockerfile`'s `ARG TORCH_VERSION` and **refusing** if the lock header's recipe disagrees with it,
+  preserving the hand-written header uv would otherwise overwrite (and refusing if that header is
+  missing rather than silently losing the recipe). Both locks land in **one** commit, so the derived
+  pair can never be half-updated. (2) The commit was made by a plain `git commit` + `git push`. The
+  `required_signatures` ruleset is `~DEFAULT_BRANCH`-scoped, so that push to `dependabot/pip/**`
+  *succeeded* -- and left an unsigned commit in the branch's history, which blocks the very merge the
+  push exists to enable. It now goes through `createCommitOnBranch`, which GitHub signs, matching
+  juniper-data / juniper-canopy / juniper-cascor. Follow-up 6c of juniper-ml
+  `prompts/thread-handoff_automated-prompts/HANDOFF_2026-09-08_container-registry-rollout-wave-2-opened-and-the-cuda-class-in-three-shapes.md`.
 - **`requirements-cpu.lock` had drifted from `requirements.lock` on 10 of their 19 shared pins,
   and the unit suite tested a torch the image does not ship.** Two halves of one problem: the CPU
   lock was an *independent* resolution (no `--constraint`), and `lockfile-update.yml` regenerates
