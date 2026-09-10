@@ -14,12 +14,21 @@
 # Copyright:     Copyright (c) 2024-2026 Paul Calnon
 #
 # Description:
-#    Automatically updates requirements.lock when Dependabot pushes a dependency
+#    Automatically updates BOTH lockfiles when Dependabot pushes a dependency
 #    update to a dependabot/pip/** branch. Runs uv pip compile to regenerate
-#    the lockfile and commits the result so downstream Docker / CI builds
-#    stay in sync with the bumped dependency's transitive pins.
+#    requirements.lock, re-derives requirements-cpu.lock from it, and commits the
+#    pair in ONE GitHub-signed commit so downstream Docker / CI builds stay in
+#    sync with the bumped dependency's transitive pins.
 #
-#    Uses CROSS_REPO_DISPATCH_TOKEN (not GITHUB_TOKEN) so the push re-triggers CI.
+#    Two locks, because the container image is CPU-only: requirements.lock was
+#    resolved against the CUDA torch and pins the whole nvidia-*/triton stack
+#    outright, so the image installs requirements-cpu.lock instead -- the same lock
+#    minus that stack, derived with --constraint requirements.lock. Regenerating
+#    only the GPU lock (what this workflow did until 2026-09-09) drifts the CPU
+#    lock, and the CI lock checks are name-presence only, so nothing goes red. The
+#    two had already diverged on 10 of their 19 shared pins.
+#
+#    Uses CROSS_REPO_DISPATCH_TOKEN (not GITHUB_TOKEN) so the commit re-triggers CI.
 #
 #    Dependabot caveat (2026-07-28): Dependabot-triggered runs use the
 #    Dependabot secret store, so the repo-scoped CROSS_REPO_DISPATCH_TOKEN is
@@ -31,10 +40,13 @@
 #    See juniper-ml/notes/JUNIPER_2026-05-02_JUNIPER-ECOSYSTEM_V17-V18-CROSS-REPO-DISPATCH-TOKEN-SETUP.md
 #    for the secret-provisioning walkthrough.
 #
-#    The previous lockfile was compiled with:
+#    The GPU lockfile was compiled with:
 #       uv pip compile pyproject.toml --no-emit-package torch -o requirements.lock
 #    This workflow preserves that invocation so the regeneration is
-#    bit-for-bit consistent with the existing lockfile header.
+#    bit-for-bit consistent with the existing lockfile header. The CPU lock's own
+#    recipe lives in requirements-cpu.lock's header and is mirrored by the step
+#    below; the torch pin it needs is read from the Dockerfile's ARG TORCH_VERSION
+#    rather than restated here, so there is one source of truth for it.
 #####################################################################################################################################################################################################
 
 name: Update Lockfile (Dependabot)
@@ -120,15 +132,122 @@ jobs:
             --upgrade \
             -o requirements.lock
 
-      - name: Commit updated lockfile
+      # ``requirements-cpu.lock`` (the CONTAINER image's lock) is DERIVED from
+      # requirements.lock via ``--constraint``, so regenerating the GPU lock alone drifts
+      # it. That is not hypothetical: this repo's two locks had diverged on 10 of their 19
+      # shared pins by 2026-09-09 (setuptools 70.2.0 vs 83.0.0, numpy 2.4.4 vs 2.5.1, ...)
+      # precisely because this step regenerated one of them, and the CI lock checks are
+      # name-presence only so nothing went red. Re-derive it here, in the same run, and
+      # commit BOTH files in the SAME commit below.
+      #
+      # This step runs AFTER the GPU regen above on purpose: --constraint reads the lock
+      # that step just rewrote.
+      - name: Regenerate requirements-cpu.lock (derived from the GPU lock)
         if: steps.gate.outputs.proceed == 'true'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add requirements.lock
-          if git diff --cached --quiet; then
-            echo "::notice::Lockfile already up to date — no commit needed"
-          else
-            git commit -m "[dependabot skip] Update requirements.lock"
-            git push
+          set -euo pipefail
+
+          echo "╔════════════════════════════════════════════════════════════╗"
+          echo "║       Juniper Cascor Worker - Regenerate CPU Lockfile      ║"
+          echo "╚════════════════════════════════════════════════════════════╝"
+
+          # The torch pin lives in the Dockerfile (ARG TORCH_VERSION) and is mirrored in
+          # the CPU lock header's recipe; tests/test_dockerfile_cpu_torch_pin.py asserts the
+          # two agree. Read the operative one and REFUSE if the header disagrees, rather
+          # than regenerating against a stale pin and restoring a header that contradicts it.
+          TORCH_VERSION="$(sed -n 's/^ARG TORCH_VERSION=//p' Dockerfile)"
+          HEADER_VERSION="$(sed -n 's/.*torch==\([0-9][0-9.]*\)+cpu.*/\1/p' requirements-cpu.lock | head -1)"
+          if [ -z "${TORCH_VERSION}" ] || [ "${TORCH_VERSION}" != "${HEADER_VERSION}" ]; then
+            echo "::error::torch pin mismatch — Dockerfile ARG TORCH_VERSION='${TORCH_VERSION}', requirements-cpu.lock header='${HEADER_VERSION}'. Bump both together, then re-run."
+            exit 1
           fi
+          echo "torch==${TORCH_VERSION}+cpu" > /tmp/torch-cpu-override
+
+          # Preserve the hand-written header: uv replaces it with its own command line.
+          # The header is every leading line before the first pin (the first line starting
+          # with neither whitespace nor '#').
+          awk '/^[^[:space:]#]/{exit} {print}' requirements-cpu.lock > /tmp/cpu-lock-header
+          if [ ! -s /tmp/cpu-lock-header ]; then
+            echo "::error::requirements-cpu.lock has no leading comment header — refusing to regenerate and lose the recipe."
+            exit 1
+          fi
+
+          # Compiled to a fresh path, not in place: uv reads an existing -o file as extra
+          # constraints, which would silently freeze the bump. (The GPU step above solves the
+          # same trap with --upgrade; here --constraint already supplies the pins, so a fresh
+          # path is the honest form.)
+          uv pip compile pyproject.toml \
+            --index-strategy unsafe-best-match \
+            --extra-index-url https://download.pytorch.org/whl/cpu \
+            --no-emit-package torch \
+            --override /tmp/torch-cpu-override \
+            --constraint requirements.lock \
+            --python-version 3.14 \
+            -o /tmp/requirements-cpu.lock.check
+
+          # Everything from the first pin on, dropping uv's own autogenerated header.
+          awk 'f || /^[^[:space:]#]/{f = 1; print}' /tmp/requirements-cpu.lock.check > /tmp/cpu-lock-body
+          cat /tmp/cpu-lock-header /tmp/cpu-lock-body > requirements-cpu.lock
+
+      # The regen commit is created through the GitHub API rather than by a local
+      # `git commit` + `git push`, because GitHub SIGNS API-created commits and this repo
+      # enforces required_signatures on the default branch (juniper-ml#1099). The ruleset is
+      # ~DEFAULT_BRANCH-scoped, so the old plain push to dependabot/pip/** SUCCEEDED — and
+      # then left an unsigned commit in the branch's history, which blocks the merge that
+      # push exists to enable. juniper-data, juniper-canopy and juniper-cascor were converted
+      # earlier; this repo was not. CROSS_REPO_DISPATCH_TOKEN stays the identity so the
+      # resulting commit still re-triggers CI (GITHUB_TOKEN would not).
+      - name: Commit updated lockfiles (GitHub-signed, via API)
+        if: steps.gate.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_DISPATCH_TOKEN }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- requirements.lock requirements-cpu.lock; then
+            echo "::notice::Lockfiles already up to date — no commit needed"
+            exit 0
+          fi
+
+          # Both locks go in ONE commit even when only one changed: they are a derived pair,
+          # and landing them separately is the drift this step exists to prevent.
+          # createCommitOnBranch takes each file's full contents, so an unchanged file is
+          # simply rewritten identically — a no-op in the resulting tree.
+          git diff --quiet -- requirements.lock \
+            && echo "::notice::requirements.lock unchanged" \
+            || echo "::notice::requirements.lock updated"
+          git diff --quiet -- requirements-cpu.lock \
+            && echo "::notice::requirements-cpu.lock unchanged" \
+            || echo "::notice::requirements-cpu.lock updated"
+
+          # expectedHeadOid makes this a compare-and-swap: if anything landed on the branch
+          # since checkout, the mutation fails loudly rather than clobbering it (the old
+          # `git push` had the same protection).
+          HEAD_OID=$(git rev-parse HEAD)
+
+          jq -n \
+            --arg repo "${GITHUB_REPOSITORY}" \
+            --arg branch "${BRANCH}" \
+            --arg oid "${HEAD_OID}" \
+            --arg contents "$(base64 -w0 requirements.lock)" \
+            --arg cpu_contents "$(base64 -w0 requirements-cpu.lock)" \
+            '{query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url } } }",
+              variables: {input: {
+                branch: {repositoryNameWithOwner: $repo, branchName: $branch},
+                message: {headline: "[dependabot skip] Update requirements.lock and requirements-cpu.lock"},
+                expectedHeadOid: $oid,
+                fileChanges: {additions: [{path: "requirements.lock", contents: $contents},
+                                          {path: "requirements-cpu.lock", contents: $cpu_contents}]}
+              }}}' > /tmp/lockfile-commit.json
+
+          gh api graphql --input /tmp/lockfile-commit.json > /tmp/lockfile-commit-result.json
+
+          if jq -e '.errors' /tmp/lockfile-commit-result.json > /dev/null; then
+            echo "::error::createCommitOnBranch failed — lockfiles NOT committed:"
+            jq '.errors' /tmp/lockfile-commit-result.json
+            exit 1
+          fi
+
+          jq -r '"Signed lockfile commit: " + .data.createCommitOnBranch.commit.url' \
+            /tmp/lockfile-commit-result.json
