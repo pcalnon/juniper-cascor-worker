@@ -6,7 +6,7 @@
 **License**: MIT License
 **Version**: 0.5.0
 **Python**: >=3.11 (supports 3.11, 3.12, 3.13, 3.14)
-**Last Updated**: 2026-09-10
+**Last Updated**: 2026-09-11
 
 ---
 
@@ -255,7 +255,7 @@ Per-suite detail: what each test file covers and the marker it carries. Moved to
 
 ### Sequence Safety (Advisory) — `sequence-safety.yml` + `main-verify.yml`
 
-Two **advisory** (non-required) workflows fanned out from the juniper-ml sequence-safety rollout (Wave-2). Both consume the AST symbol-loss and docs deletion-magnitude screens from the published `juniper-ci-tools>=0.8.0,<0.10.0` package (console scripts `juniper-symbol-loss-check` and `juniper-docs-additions-check`) — the single source of truth, no inline copy.
+Two **advisory** (non-required) workflows fanned out from the juniper-ml sequence-safety rollout (Wave-2). Both consume the AST symbol-loss and docs deletion-magnitude screens from the published `juniper-ci-tools>=0.9.0,<0.10.0` package (console scripts `juniper-symbol-loss-check` and `juniper-docs-additions-check`) — the single source of truth, no inline copy.
 
 | Workflow | Trigger | Role |
 |----------|---------|------|
