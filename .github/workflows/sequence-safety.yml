@@ -14,7 +14,7 @@
 # Copyright:     Copyright (c) 2024-2026 Paul Calnon
 #
 # Description:
-#    Per-PR sequence-safety net (ADVISORY, standalone) -- the compositional-loss screen
+#    Per-PR sequence-safety net (REQUIRED, standalone) -- the compositional-loss screen
 #    fanned out from juniper-ml (flood-remediation analysis §4 item 8; ecosystem rollout
 #    plan Wave-2). Runs the AST symbol-loss screen + the docs deletion-magnitude screen
 #    over the PR's base..HEAD, so the silent-deletion / net-docs-deletion classes that a
@@ -34,11 +34,24 @@
 #    (AGENTS.md + docs/**/*.md + notes/**/*.md), which already covers this repo, so it takes
 #    no --scope.
 #
-#    ADVISORY, NOT a required check (the codeql soak convention). This is a STANDALONE
-#    workflow, deliberately separate from ci.yml, so it is never wired into the CI Quality
-#    Gate and never blocks a merge. It informs the owner's review; enforcement is the
-#    post-merge net (main-verify.yml). Promotion to a required context, if ever desired,
-#    is an owner-only branch-ruleset decision -- this PR makes NO ruleset change.
+#    REQUIRED in the branch ruleset, and deliberately ABSENT from the CI Quality Gate
+#    `needs:`. Those are two different things and this comment used to conflate them: it
+#    opened "ADVISORY, NOT a required check" and promised that promotion "if ever desired"
+#    would be a future owner-only decision. The promotion HAPPENED; nobody edited the
+#    header. A reader who trusts it takes a red Sequence Safety for non-blocking; it
+#    blocks. Verified against the live ruleset, which this command prints:
+#
+#        gh api repos/pcalnon/juniper-cascor-worker/rulesets/14250447
+#
+#    It lists `Sequence Safety` among its required contexts. Read the ruleset, never this
+#    comment -- a comment and a ruleset are different authorities, and this header is
+#    the standing proof that they drift.
+#
+#    It remains a STANDALONE workflow, deliberately separate from ci.yml and never wired
+#    into the CI Quality Gate `needs:` -- which is a SEPARATE fact from whether it is
+#    required, and the one this header previously used to justify the wrong claim. Being
+#    required is a branch-ruleset property; the Quality Gate is a workflow property.
+#    Enforcement after merge is still the post-merge net (main-verify.yml).
 #
 #    Label hatch (WARN-only): the owner-applied `allow-symbol-loss` / `docs-rewrite` PR
 #    labels demote THAT screen's FAIL to WARN-only for this run (`--advisory`: exit 0 with
@@ -83,8 +96,9 @@ env:
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
-  # sequence-safety (ADVISORY): AST symbol-loss screen + docs deletion-magnitude screen over the PR's
-  # base..HEAD. Standalone + advisory -- never a required context, never wired into the CI gate.
+  # sequence-safety (REQUIRED): AST symbol-loss screen + docs deletion-magnitude screen over the PR's
+  # base..HEAD. Standalone, and REQUIRED in the branch ruleset -- not wired into the CI gate, which
+  # is a SEPARATE fact.
   # ═══════════════════════════════════════════════════════════════════════════════════════════════
   sequence-safety:
     name: Sequence Safety
