@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-11
+
 ### Fixed
 
 - **`lockfile-update.yml` regenerated only `requirements.lock`, and committed it UNSIGNED.** Two
