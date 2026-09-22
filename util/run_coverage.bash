@@ -44,12 +44,12 @@ python -m coverage report --fail-under="${COVERAGE_FAIL_UNDER}"
 # Per-file coverage rollout C-5 (juniper-ml
 # notes/JUNIPER_ECOSYSTEM_PER_FILE_COVERAGE_ROLLOUT_SCOPING_2026-06-30.md):
 # statement >=90 per file / pooled >=95 per sub-module. Additive to the aggregate
-# gate above. Requires juniper-ci-tools>=0.6.0,<0.7.0; skipped with a hint if the
+# gate above. Requires juniper-ci-tools>=0.9.0,<0.10.0; skipped with a hint if the
 # console script is absent so `make coverage` still works without it installed.
 if command -v juniper-coverage-gap-map >/dev/null 2>&1; then
     juniper-coverage-gap-map --coverage-json reports/coverage.json --enforce
 else
     echo "==> NOTE: juniper-coverage-gap-map not found — skipping the per-file gate."
-    echo "         Install it with: pip install \"juniper-ci-tools>=0.6.0,<0.7.0\""
+    echo "         Install it with: pip install \"juniper-ci-tools>=0.9.0,<0.10.0\""
 fi
 # ─────────────────────────────────────────────────────────────────────────────────────

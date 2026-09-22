@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`juniper_cascor_worker.__version__` read `0.4.0` while the package shipped `0.6.0`** (#192).
+  The literal in `__init__.py` was never bumped, so **both 0.5.0 and 0.6.0** shipped a package
+  that misreports its own version, and `__version__` is in `__all__`. It is now read from installed
+  metadata (`importlib.metadata.version("juniper-cascor-worker")`); the literal is only a fallback
+  for a source checkout. That matches `juniper_data` and `juniper_canopy`, and stops the drift
+  coming back at the next version bump, which a new literal would not. **The published 0.6.0
+  artifacts still report `0.4.0`**, because a merge does not republish anything. Inside
+  `ghcr.io/pcalnon/juniper-cascor-worker:0.6.0`, `__version__` and
+  `importlib.metadata.version()` print `0.4.0 0.6.0`. Only the next release corrects them. The
+  defect was found by running the published image. Reading `pyproject.toml` alone would not have
+  shown it.
+- **`.dockerignore` carried no credential exclusions, and the publish path never checked that
+  the application imports** (#191). Docker does not honour `.gitignore`. `COPY <pkg>/ ./<pkg>/`
+  allowlists a directory, not individual files, so it ships everything beneath it. The new block
+  excludes `secrets/`, `*.key`, `*.pem`, `.env` and `.env.*` in both root-anchored and `**/`
+  form, plus `*.p12` and `*.pfx` at the root only, and re-includes `!.env.example`. A nested
+  `*.p12` or `*.pfx` is not excluded. The image scan looks for both names under `/app` and in
+  every installed `juniper*` package, so one that reached the image would fail the publish
+  instead of shipping. `publish-image.yml` now runs
+  `util/check_image_no_secrets.py` inside both the smoke-built image and the pushed image, and
+  imports `juniper_cascor_worker` from the pushed image. Before this, the release path checked the
+  torch build and never checked that the application loads. **Nothing leaked.** The excluded paths
+  were untracked, so `actions/checkout` never put them in the build context.
+- **Eight lines in five files stated `juniper-ci-tools` ranges that CI no longer installs**
+  (#193). CI installs `>=0.9.0,<0.10.0` everywhere: `ci.yml`, `sequence-safety.yml` and
+  `main-verify.yml`, since #181 and #183. Meanwhile `docs/REFERENCE.md` and
+  `docs/DEVELOPER_CHEATSHEET.md` still said `>=0.6.0,<0.7.0`, two lines each.
+  `util/run_coverage.bash` gave that range in its comment and in the install hint it prints, so a
+  developer who followed the hint got an older `juniper-ci-tools` than CI's per-file coverage gate
+  runs. The header comments of `sequence-safety.yml` and `main-verify.yml` described
+  `>=0.8.0,<0.9.0`.
+
 ## [0.6.0] - 2026-09-11
 
 ### Fixed

@@ -23,7 +23,7 @@
 #
 #    Unlike the two juniper-ml / juniper-cascor pioneers (which ran hand-copied inline
 #    util/sequence_safety/ modules), this repo consumes the screens from the PUBLISHED
-#    juniper-ci-tools package (>=0.8.0,<0.9.0) via its two console scripts --
+#    juniper-ci-tools package (>=0.9.0,<0.10.0) via its two console scripts --
 #    juniper-symbol-loss-check + juniper-docs-additions-check -- the single source of truth
 #    that ends the inline-copy drift class the house killed twice before (doc-tools,
 #    dep-docs).

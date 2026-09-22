@@ -501,7 +501,7 @@ bash util/run_coverage.bash   # source of truth (mirrors .github/workflows/ci.ym
 Gates:
 
 - **Aggregate**: 80% package coverage by default (`coverage report --fail-under=${COVERAGE_FAIL_UNDER}`); override with `COVERAGE_FAIL_UNDER=<n>`.
-- **Per-file / pooled statement coverage**: CI installs `juniper-ci-tools>=0.6.0,<0.7.0` and runs `juniper-coverage-gap-map --coverage-json reports/coverage.json --enforce`, failing when any source file is below 90% statement coverage or any packaged sub-module is below 95% statement-weighted pooled coverage.
+- **Per-file / pooled statement coverage**: CI installs `juniper-ci-tools>=0.9.0,<0.10.0` and runs `juniper-coverage-gap-map --coverage-json reports/coverage.json --enforce`, failing when any source file is below 90% statement coverage or any packaged sub-module is below 95% statement-weighted pooled coverage.
 
 `util/run_coverage.bash` writes `reports/coverage.json` and runs both gates locally when `juniper-coverage-gap-map` is installed. If the tool is missing, the helper prints the install hint and skips only the per-file gate; CI always treats the per-file gate as blocking. The script runs the full suite by design so percentages match CI; for a narrower debug loop use plain `pytest`.
 
@@ -623,7 +623,7 @@ CI coverage enforcement is additive:
 - `coverage report --fail-under=${COVERAGE_FAIL_UNDER}` checks aggregate package coverage. The default threshold is 80%.
 - `juniper-coverage-gap-map --coverage-json reports/coverage.json --enforce` checks `reports/coverage.json` for at least 90% statement coverage in each source file and at least 95% statement-weighted pooled coverage in each packaged sub-module.
 
-`make coverage` and `bash util/run_coverage.bash` run the full suite because narrowed selections do not reproduce CI percentages. The helper writes `reports/coverage.json` for the per-file gate. Locally, the per-file gate runs only when `juniper-coverage-gap-map` from `juniper-ci-tools>=0.6.0,<0.7.0` is installed; CI installs the tool and fails the `unit-tests` job if the gate reports gaps.
+`make coverage` and `bash util/run_coverage.bash` run the full suite because narrowed selections do not reproduce CI percentages. The helper writes `reports/coverage.json` for the per-file gate. Locally, the per-file gate runs only when `juniper-coverage-gap-map` from `juniper-ci-tools>=0.9.0,<0.10.0` is installed; CI installs the tool and fails the `unit-tests` job if the gate reports gaps.
 
 ### Test Files
 

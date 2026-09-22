@@ -228,9 +228,9 @@ When a PR fails the quality gate, inspect the failed upstream job first; `requir
 The `unit-tests` job enforces two coverage gates:
 
 1. **Aggregate package coverage**: `python -m coverage report --fail-under=${COVERAGE_FAIL_UNDER}`. The default threshold is 80%, and callers may raise it with `COVERAGE_FAIL_UNDER=<n>`.
-2. **Per-file / pooled statement coverage**: `juniper-coverage-gap-map --coverage-json reports/coverage.json --enforce` from `juniper-ci-tools>=0.6.0,<0.7.0`. This fails when any source file is below 90% statement coverage or any packaged sub-module is below 95% statement-weighted pooled coverage.
+2. **Per-file / pooled statement coverage**: `juniper-coverage-gap-map --coverage-json reports/coverage.json --enforce` from `juniper-ci-tools>=0.9.0,<0.10.0`. This fails when any source file is below 90% statement coverage or any packaged sub-module is below 95% statement-weighted pooled coverage.
 
-`util/run_coverage.bash` is the local source of truth for reproducing CI. It runs the full test suite, writes `reports/coverage.json`, checks the aggregate threshold, and then runs the per-file gate when `juniper-coverage-gap-map` is installed. If the console script is missing, the local helper prints the `pip install "juniper-ci-tools>=0.6.0,<0.7.0"` hint and skips only the per-file check; CI always installs the tool and treats that gate as blocking.
+`util/run_coverage.bash` is the local source of truth for reproducing CI. It runs the full test suite, writes `reports/coverage.json`, checks the aggregate threshold, and then runs the per-file gate when `juniper-coverage-gap-map` is installed. If the console script is missing, the local helper prints the `pip install "juniper-ci-tools>=0.9.0,<0.10.0"` hint and skips only the per-file check; CI always installs the tool and treats that gate as blocking.
 
 Use plain `pytest` for narrow debug loops. Do not use a narrowed test selection to approve coverage, because a subset can lower or skew the package/file percentages relative to CI.
 
