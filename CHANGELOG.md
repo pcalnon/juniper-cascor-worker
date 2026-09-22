@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-22
+
 ### Fixed
 
 - **`juniper_cascor_worker.__version__` read `0.4.0` while the package shipped `0.6.0`** (#192).
@@ -14,12 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that misreports its own version, and `__version__` is in `__all__`. It is now read from installed
   metadata (`importlib.metadata.version("juniper-cascor-worker")`); the literal is only a fallback
   for a source checkout. That matches `juniper_data` and `juniper_canopy`, and stops the drift
-  coming back at the next version bump, which a new literal would not. **The published 0.6.0
-  artifacts still report `0.4.0`**, because a merge does not republish anything. Inside
+  coming back at the next version bump, which a new literal would not. **0.6.1 is the first
+  release that ships this fix.** The published 0.6.0 artifacts still report `0.4.0`: the 0.6.0
+  wheel's `__init__.py` hard-codes `__version__ = "0.4.0"`, and inside
   `ghcr.io/pcalnon/juniper-cascor-worker:0.6.0`, `__version__` and
-  `importlib.metadata.version()` print `0.4.0 0.6.0`. Only the next release corrects them. The
-  defect was found by running the published image. Reading `pyproject.toml` alone would not have
-  shown it.
+  `importlib.metadata.version()` print `0.4.0 0.6.0`. The defect was found by running the
+  published image. Reading `pyproject.toml` alone would not have shown it.
 - **`.dockerignore` carried no credential exclusions, and the publish path never checked that
   the application imports** (#191). Docker does not honour `.gitignore`. `COPY <pkg>/ ./<pkg>/`
   allowlists a directory, not individual files, so it ships everything beneath it. The new block
