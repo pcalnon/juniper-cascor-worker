@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`lockfile-update.yml` regenerated the locks on release-proposal PRs.** Its `pull_request`
+  arm fires on any `pyproject.toml` change, and a release proposal's version bump is one, so the
+  `--upgrade` regen ran on `release/**` branches and committed whatever upstream had moved. The
+  job now skips a head branch that starts with `release/`, the clause juniper-data,
+  juniper-cascor and juniper-canopy have carried since juniper-ml#1099. A version bump cannot
+  change dependency resolution, and the required Lockfile Freshness gate is constraint-mode, so it
+  stays green on such a PR. **0.6.1 shipped an unannounced lock refresh this way**: the 0.6.1
+  proposal (#194) picked up `bca33c99`, which moved `filelock` 3.32.6 → 4.0.1, `fsspec`
+  2026.7.0 → 2026.9.0 and `networkx` 3.6.1 → 3.7 in the CPU image lock. Neither the `[0.6.1]`
+  notes nor the Release body mention it. An import check of the published 0.6.1 amd64 image
+  passed for all three and for `juniper_cascor_worker.worker`.
+
 ## [0.6.1] - 2026-09-22
 
 ### Fixed
