@@ -56,6 +56,13 @@
 #    just pushed (BEFORE the digest is handed to the merge job, so a failing arch means no
 #    tag is ever written), and in the merge job against the tag a consumer pulls.
 #
+#    THE IMAGE MUST SERVE, AND BE THE VERSION IT IS TAGGED. ``util/check_image_serves.py``
+#    (2026-09-23, item 5 of the container-registry rollout) starts the image as deployed and
+#    requires liveness on 127.0.0.1:8210 plus ONE version on every surface: installed
+#    metadata, ``__version__`` and the health body -- on a release, the version in the tag.
+#    0.5.0 and 0.6.0 shipped a package whose ``__version__`` read 0.4.0 while every check
+#    passed. It runs on the PR arm and against each pushed digest, before the digest is exported.
+#
 #    Related: juniper-ml notes/JUNIPER_2026-09-05_JUNIPER-ECOSYSTEM_CONTAINER-REGISTRY-PUBLISHING-PLAN.md
 #####################################################################################################################################################################################################
 
@@ -75,6 +82,7 @@ on:
       - "juniper_cascor_worker/**"
       - "util/check_image_cpu_only.py"
       - "util/check_image_no_secrets.py"
+      - "util/check_image_serves.py"
       - ".github/workflows/publish-image.yml"
   workflow_dispatch:
     inputs:
@@ -249,6 +257,23 @@ jobs:
           docker run --rm "${img}" --help > /dev/null
           echo "    juniper-cascor-worker --help OK"
 
+      # `--help` proves the console script resolves; it does not prove the worker RUNS. This
+      # starts the image exactly as a deployment does -- its own entrypoint and command -- and
+      # requires the health server to answer on 127.0.0.1:8210 inside the container, with every
+      # version it reports equal to the one being built. With no manager reachable the worker
+      # keeps retrying and the health server stays up, which is the liveness this asserts. The
+      # same script runs on the publish path below; running it here too means the PR that edits
+      # it exercises it, instead of the first release.
+      - name: Serve and version check (build-only runs)
+        if: github.event_name != 'release' && !inputs.push
+        env:
+          APP_VERSION: ${{ steps.prov.outputs.app_version }}
+        run: |
+          python3 util/check_image_serves.py \
+            --image 'worker-smoke:${{ matrix.arch }}' \
+            --dist juniper-cascor-worker --module juniper_cascor_worker \
+            --port 8210 --expect-version "${APP_VERSION}"
+
       # The smoke test above never runs on a publish, so the CPU-only contract must ALSO be
       # asserted on the path that ships. Pull the image just pushed -- by digest, on this
       # same native arch -- and run the census against it. A failure fails this arch's job,
@@ -283,6 +308,37 @@ jobs:
           # zero tests for six months.
           echo "--- the application imports"
           docker run --rm --entrypoint python "${ref}" -c 'import juniper_cascor_worker; print("    juniper_cascor_worker imports")'
+
+      # "It imports" is not "it serves", and neither is "it is the version it claims". 0.5.0
+      # and 0.6.0 both shipped a package whose __version__ read 0.4.0 -- the import above passes
+      # that. So the image just pushed must start as deployed, answer liveness, and report ONE
+      # version everywhere: installed metadata, __version__, and the health body. On a release
+      # that version must be the TAG's, because the merge job names the image after the tag --
+      # an image tagged X.Y.Z must not carry a package that says anything else. Before Export
+      # digest, so a failing arch never reaches the merge job and no tag is written.
+      - name: Verify pushed image serves and reports its version (publish runs)
+        if: github.event_name == 'release' || inputs.push
+        env:
+          APP_VERSION: ${{ steps.prov.outputs.app_version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          digest='${{ steps.build.outputs.digest }}'
+          if [ -z "${digest}" ]; then
+            echo "::error::build produced no digest -- nothing to verify"
+            exit 1
+          fi
+          expect="${APP_VERSION}"
+          if [ "${GITHUB_EVENT_NAME}" = "release" ]; then
+            expect="${RELEASE_TAG#v}"
+            if [ "${expect}" != "${APP_VERSION}" ]; then
+              echo "::error::release ${RELEASE_TAG} names ${expect}, but pyproject.toml says ${APP_VERSION} -- the image would be tagged ${expect} and report ${APP_VERSION}"
+              exit 1
+            fi
+          fi
+          python3 util/check_image_serves.py \
+            --image "${REGISTRY}/${IMAGE_NAME}@${digest}" \
+            --dist juniper-cascor-worker --module juniper_cascor_worker \
+            --port 8210 --expect-version "${expect}"
 
       - name: Export digest
         if: github.event_name == 'release' || inputs.push
