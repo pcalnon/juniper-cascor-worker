@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The publish path asserts that the image serves, and that it is the version it is tagged**
+  (`util/check_image_serves.py`, new; `publish-image.yml`). The existing checks cover what the image
+  contains and that the application imports. 0.5.0 and 0.6.0 each shipped a package whose
+  `__version__` read `0.4.0`, and every one of those checks passed. The new script starts the image
+  as deployed, with its own entrypoint and command. It requires the health server to answer
+  `/v1/health` with 200 on 127.0.0.1:8210 inside the container. It also requires one version across
+  the installed metadata, `__version__` and the health body, and on a release that version is the
+  one in the **tag**. An absent `__version__` fails: the class-2 sweep once scored that shape as a
+  pass. The check runs on the PR arm against the image just built, and on the publish path against
+  each pushed digest before the digest is exported. So a failing arch never reaches the merge job,
+  and no tag is written. The same script also goes into the four other image repos. Against the
+  published images it passes worker 0.6.1, fails `juniper-cascor:0.11.0` on the stale
+  `meta.version` its envelope reports, and fails `juniper-data:0.15.0` when told to expect 0.16.0.
+  `tests/test_check_image_serves.py` (new, 24 tests) needs no Docker. Two mutations each fail it:
+  an absent version scored as a pass, and a release compared against `pyproject.toml` instead of
+  its tag. This is item 5 of the juniper-ml container-registry rollout handoff.
+
 ### Fixed
 
 - **`lockfile-update.yml` regenerated the locks on release-proposal PRs.** Its `pull_request`
