@@ -40,6 +40,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   notes nor the Release body mention it. An import check of the published 0.6.1 amd64 image
   passed for all three and for `juniper_cascor_worker.worker`.
 
+### Security
+
+- **`.env.example` no longer ships a guessable `CASCOR_AUTHKEY`.** It set `juniper`, a value
+  anyone who reads this public repo knows. The legacy mode's multiprocessing manager checks this
+  key before it exchanges pickles, so a manager configured with the sample value accepts pickles
+  from anyone who can reach its port. Nothing needed the value. The worker has no default, and
+  legacy mode refuses to start without a key. The cascor manager generates a random
+  `secrets.token_hex(32)` per run unless it is configured. The line is now empty, with a comment on
+  generating a key, and `docs/DEVELOPER_CHEATSHEET.md` no longer describes the sample. The image
+  is unchanged, because its Dockerfile copies neither file.
+
 ## [0.6.1] - 2026-09-22
 
 ### Fixed
