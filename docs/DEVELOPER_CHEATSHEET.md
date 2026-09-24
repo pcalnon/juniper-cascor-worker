@@ -158,7 +158,7 @@ juniper-cascor (Server)               juniper-cascor-worker (Remote)
 | `CASCOR_TLS_CA` | unset | CA bundle path for TLS verification |
 | `CASCOR_MANAGER_HOST` | `127.0.0.1` | Manager hostname |
 | `CASCOR_MANAGER_PORT` | `50000` | Manager port |
-| `CASCOR_AUTHKEY` | *(required)* | Authentication key. No usable default; worker fails validation if unset. `.env.example` uses `juniper` as a sample value. |
+| `CASCOR_AUTHKEY` | *(required)* | Authentication key. No usable default; worker fails validation if unset. `.env.example` leaves it empty, so legacy mode refuses to start until you set one. |
 | `CASCOR_NUM_WORKERS` | `1` | Number of worker processes |
 | `CASCOR_MP_CONTEXT` | `forkserver` | Multiprocessing start method |
 
