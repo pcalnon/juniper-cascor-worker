@@ -46,10 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   anyone who reads this public repo knows. The legacy mode's multiprocessing manager checks this
   key before it exchanges pickles, so a manager configured with the sample value accepts pickles
   from anyone who can reach its port. Nothing needed the value. The worker has no default, and
-  legacy mode refuses to start without a key. The cascor manager generates a random
-  `secrets.token_hex(32)` per run unless it is configured. The line is now empty, with a comment on
-  generating a key, and `docs/DEVELOPER_CHEATSHEET.md` no longer describes the sample. The image
-  is unchanged, because its Dockerfile copies neither file.
+  legacy mode refuses to start without a key. A freshly built cascor network gets a random
+  `secrets.token_hex(32)` unless one is configured. A network restored from a snapshot reuses the
+  key saved with it, and snapshots saved before 2026-03-18 carry cascor's former hard-coded
+  default. That is a cascor issue, not this file's: juniper-cascor#691. The line is now empty, with
+  a comment on generating a key, and `docs/DEVELOPER_CHEATSHEET.md` no longer describes the sample.
+  The image is unchanged, because its Dockerfile copies neither file.
 
 ## [0.6.1] - 2026-09-22
 
