@@ -1,7 +1,7 @@
 # Developer Cheatsheet — juniper-cascor-worker
 
-**Version**: 1.1.0
-**Date**: 2026-05-04
+**Version**: 1.1.1
+**Date**: 2026-10-08
 **Project**: juniper-cascor-worker
 
 ---
@@ -38,6 +38,7 @@ Security scan behavior:
 - `codeql.yml` uses the CodeQL `init`, `autobuild`, and `analyze` actions for Python.
 - GitHub Actions are SHA-pinned with version comments. Dependabot bumps should update both the pinned SHA and the trailing version comment together.
 - The pip-audit jobs currently ignore `CVE-2026-3219` for the runner-provided pip version until an upstream fix is available; re-check that exception when changing the audit workflow.
+- `@claude` mentions are handled by `.github/workflows/claude.yml`. The mention gate, permissions, and secret input are in [Claude Code workflow](#claude-code-workflow).
 
 ---
 
@@ -204,9 +205,38 @@ WorkerError (base)
 | `.github/workflows/ci.yml` | Pushes, pull requests, manual dispatch | Required CI quality gate |
 | `.github/workflows/security-scan.yml` | Weekly Monday schedule, manual dispatch | Scheduled Bandit and `pip-audit` scan |
 | `.github/workflows/publish.yml` | Published GitHub releases | Build, publish to TestPyPI, verify install, then publish to PyPI |
-| `.github/workflows/claude.yml` | `@claude` issue and PR comments/reviews | Runs the Claude Code assistant workflow; canonical copy lives in `juniper-ml` |
+| `.github/workflows/claude.yml` | Issue comments, PR review comments, submitted reviews, and issues opened or assigned, when the new text contains `@claude` | GitHub assistant. Contract: [Claude Code workflow](#claude-code-workflow) |
 
 Workflow actions are SHA-pinned with adjacent version comments. For GitHub Actions Dependabot PRs, expect the `uses:` SHA and version comment to move together.
+
+### Claude Code workflow
+
+`.github/workflows/claude.yml` is the GitHub `@claude` assistant for this repo. The workflow name is `Claude Code`. The file header says the file is a verbatim drop-in of `juniper-ml/.github/workflows/claude.yml` and that the action invocation needs no per-repo customization. That juniper-ml copy is the declared source of truth.
+
+The workflow subscribes to four events. Job `claude` runs on `ubuntu-latest` when the new text contains `@claude`:
+
+| Event | Subscribed types | `@claude` must appear in |
+|-------|------------------|--------------------------|
+| `issue_comment` | `created` | comment body |
+| `pull_request_review_comment` | `created` | comment body |
+| `pull_request_review` | `submitted` | review body |
+| `issues` | `opened`, `assigned` | issue title or issue body |
+
+Assigning an issue starts the job when the title or body already contains `@claude`, but that run ends green without invoking Claude: the action's own trigger check reads the title and body only on `opened`, and this workflow sets no `assignee_trigger`. GitHub's `contains` ignores case, so `@Claude` starts the job too. Later edits sit outside the subscribed types (`opened` and `assigned` for issues; `created` for comments; `submitted` for reviews), so changing text after the event does not start another run. A submitted review starts the job when the review body contains `@claude`.
+
+Example mention on an issue or pull request comment:
+
+```text
+@claude why does the worker require ws:// or wss:// for server_url?
+```
+
+Permissions on the job are `contents: write`, `pull-requests: write`, `issues: write`, `id-token: write`, and `actions: read`. Checkout is SHA-pinned and sets `fetch-depth: 1`, so the run sees the tip commit.
+
+The action step (`id: claude`) passes one input, `anthropic_api_key`, from `secrets.ANTHROPIC_API_KEY`. The workflow header says to set that secret at org level and to confirm this repo can read it. This repository is owned by a user account, so no organization secret reaches it: `ANTHROPIC_API_KEY` has to be a repository secret (list the names with `gh api repos/pcalnon/juniper-cascor-worker/actions/secrets --jq '.secrets[].name'`). The step sets no prompt path, model, or tool allow-list.
+
+The `github-actions` updates in `.github/dependabot.yml` group only `github/codeql-action*`. An `anthropics/claude-code-action` bump therefore opens its own pull request. A healthy bump moves the `uses:` SHA and the adjacent version comment together. The pinned SHA stays in the workflow file.
+
+Local Claude Code session rules (thread handoff, worktrees) live in `AGENTS.md`.
 
 ### Required CI Gate
 
@@ -250,7 +280,7 @@ For GitHub Actions PRs, verify that only the intended `uses:` SHA and version co
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
 | Action version comment disagrees with the SHA | Manual edit or incomplete Dependabot update | Reconcile the `uses:` SHA with the upstream release tag before merging |
-| `docs` job fails on an internal link | Renamed or moved markdown target | Run `python scripts/check_doc_links.py --exclude templates --exclude history` locally and update the link |
+| `docs` job fails on an internal link | Renamed or moved markdown target | Install `juniper-doc-tools>=0.1.0,<0.2.0` and run `juniper-check-doc-links` with the same `--exclude` list and `--cross-repo skip` as the `docs` job in `ci.yml` |
 | `unit-tests` fails in `juniper-coverage-gap-map --enforce` | A source file dropped below 90% statement coverage or a packaged sub-module dropped below 95% pooled coverage | Run `make coverage` with `juniper-ci-tools` installed, inspect the reported file/module gaps, and add focused tests for uncovered branches |
 | Linux torch install differs from macOS | Linux CI uses the CPU-only PyTorch index; macOS uses PyPI | Keep OS-specific torch installation branches in `ci.yml` |
 | `security` fails on `pip-audit` after a runner image change | Newly reported dependency or runner-provided package vulnerability | Check the generated requirements file and only add ignores for documented no-fix cases |

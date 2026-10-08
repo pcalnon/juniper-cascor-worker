@@ -2,9 +2,9 @@
 
 ## Navigation Guide to juniper-cascor-worker Documentation
 
-**Version:** 0.2.0
+**Version:** 0.2.1
 **Status:** Active
-**Last Updated:** May 4, 2026
+**Last Updated:** October 8, 2026
 **Project:** Juniper - Distributed CasCor Training Worker
 
 ---
@@ -31,6 +31,7 @@
 | **See version history** | [CHANGELOG.md](../CHANGELOG.md) | Root |
 | **Quick-reference dev tasks** | [DEVELOPER_CHEATSHEET.md](DEVELOPER_CHEATSHEET.md) | docs/ |
 | **Understand CI and security scans** | [DEVELOPER_CHEATSHEET.md](DEVELOPER_CHEATSHEET.md#ci-and-security-workflows) | docs/ |
+| **Invoke the `@claude` assistant** | [DEVELOPER_CHEATSHEET.md](DEVELOPER_CHEATSHEET.md#claude-code-workflow) | docs/ |
 | **Run tests** | [AGENTS.md](../AGENTS.md) | Root |
 
 ---
@@ -90,8 +91,8 @@ juniper-ml[worker] --> juniper-cascor-worker --WebSocket--> juniper-cascor
 
 ---
 
-**Last Updated:** May 4, 2026
-**Version:** 0.2.0
+**Last Updated:** October 8, 2026
+**Version:** 0.2.1
 **Maintainer:** Paul Calnon
 
 > See the [Juniper Ecosystem Guide](https://github.com/pcalnon/juniper-ml/blob/main/CLAUDE.md) for the full project map and dependency graph.
