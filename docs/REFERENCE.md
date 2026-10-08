@@ -326,7 +326,7 @@ juniper-cascor-worker/
 +-- .github/
     +-- workflows/
     |   +-- ci.yml                      # Main CI pipeline
-    |   +-- sequence-safety.yml         # Per-PR advisory sequence-safety net
+    |   +-- sequence-safety.yml         # Per-PR required sequence-safety net
     |   +-- main-verify.yml             # Post-merge bypass-proof screen net
     |   +-- security-scan.yml           # Weekly security scanning
     |   +-- publish.yml                 # PyPI publishing (OIDC)
