@@ -6,7 +6,7 @@
 **License**: MIT License
 **Version**: 0.6.1
 **Python**: >=3.11 (supports 3.11, 3.12, 3.13, 3.14)
-**Last Updated**: 2026-09-22
+**Last Updated**: 2026-10-08
 
 ---
 
@@ -154,7 +154,7 @@ Pre-CFG-06 deployments using the bare `CASCOR_*` (or partial-scope `CASCOR_WORKE
 | `util/run_coverage.bash` | Local helper that mirrors the CI aggregate coverage gate |
 | `.pre-commit-config.yaml` | Pre-commit hook configuration |
 | `.github/workflows/ci.yml` | CI/CD pipeline |
-| `.github/workflows/sequence-safety.yml` | Per-PR **advisory** sequence-safety screens (symbol-loss + docs) from `juniper-ci-tools` |
+| `.github/workflows/sequence-safety.yml` | Per-PR **required** sequence-safety screens (symbol-loss + docs) from `juniper-ci-tools` |
 | `.github/workflows/main-verify.yml` | Post-merge bypass-proof sequence-safety net (screens-only; catch-up base) |
 
 ---
@@ -253,16 +253,19 @@ Per-suite detail: what each test file covers and the marker it carries. Moved to
 
 **Trigger**: GitHub release (`v*.*.*` tags). Publishes to PyPI via trusted publishing (OIDC, no stored credentials).
 
-### Sequence Safety (Advisory) — `sequence-safety.yml` + `main-verify.yml`
+### Sequence Safety (Required) — `sequence-safety.yml` + `main-verify.yml`
 
-Two **advisory** (non-required) workflows fanned out from the juniper-ml sequence-safety rollout (Wave-2). Both consume the AST symbol-loss and docs deletion-magnitude screens from the published `juniper-ci-tools>=0.9.0,<0.10.0` package (console scripts `juniper-symbol-loss-check` and `juniper-docs-additions-check`) — the single source of truth, no inline copy.
+Two workflows fanned out from the juniper-ml sequence-safety rollout (Wave-2). Both consume the AST symbol-loss and docs deletion-magnitude screens from the published `juniper-ci-tools>=0.9.0,<0.10.0` package (console scripts `juniper-symbol-loss-check` and `juniper-docs-additions-check`) — the single source of truth, no inline copy.
 
 | Workflow | Trigger | Role |
 |----------|---------|------|
-| `sequence-safety.yml` | `pull_request` (main/develop) | Per-PR review signal: screens base..HEAD and uploads the `sequence-safety-report` artifact. Owner labels `allow-symbol-loss` / `docs-rewrite` demote a FAIL to WARN-only (`--advisory`); the `Allow-Symbol-Loss:` / `Allow-Docs-Rewrite:` commit trailers are the primary waivers. |
+| `sequence-safety.yml` | `pull_request` (main/develop) | Per-PR **required** check `Sequence Safety`: screens base..HEAD and uploads the `sequence-safety-report` artifact. Owner labels `allow-symbol-loss` / `docs-rewrite` demote a FAIL to WARN-only (`--advisory`, exit 0), which greens the check for that PR; the `Allow-Symbol-Loss:` / `Allow-Docs-Rewrite:` commit trailers are the primary waivers. |
 | `main-verify.yml` | `push` (main) + dispatch | Post-merge, bypass-proof net: per-SHA and no-cancel so every merge is screened, catch-up base sweeps `[skip ci]` windows, and a failure upserts one stable-title tracking issue per red streak. Screens-only — the regression battery is deferred. |
 
-Symbol scope is `juniper_cascor_worker/**/*.py` + `tests/**/*.py` (the worker's Python surface); the docs screen uses the universal default (`AGENTS.md` + `docs/**/*.md` + `notes/**/*.md`). Neither workflow is a required status check — this changes no branch ruleset.
+Symbol scope is `juniper_cascor_worker/**/*.py` + `tests/**/*.py` (the worker's Python surface); the docs screen uses the universal default (`AGENTS.md` + `docs/**/*.md` + `notes/**/*.md`).
+`Sequence Safety` is a **required** status check in ruleset `juniper-cascor-worker-rules` (id `14250447`), but it sits outside `ci.yml`'s Quality Gate `needs:` (a `needs:` entry can only name a job in the same workflow), so a green Quality Gate does not mean mergeable.
+`main-verify.yml` runs after the merge, so it is not a PR status check, and only the commit trailers clear it (a label does not); on a squash merge, carry them into the squash commit message.
+Live list: `gh api repos/pcalnon/juniper-cascor-worker/rulesets/14250447 --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'`.
 
 ### Pre-commit Hooks
 

@@ -39,6 +39,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2026.7.0 → 2026.9.0 and `networkx` 3.6.1 → 3.7 in the CPU image lock. Neither the `[0.6.1]`
   notes nor the Release body mention it. An import check of the published 0.6.1 amd64 image
   passed for all three and for `juniper_cascor_worker.worker`.
+- **`AGENTS.md` called `Sequence Safety` advisory and said neither sequence-safety workflow
+  is a required status check.** Ruleset `juniper-cascor-worker-rules` (14250447) requires
+  that context on `main`, so a red run blocks the merge. The section is now titled
+  *(Required)*. It says the check sits outside `ci.yml`'s Quality Gate `needs:`, so a green
+  Quality Gate does not mean mergeable, and it gives the ruleset query. It also says an owner
+  label greens the check for one PR, while `main-verify.yml` runs after the merge and is
+  cleared only by the commit trailers. The same claim is corrected in the `docs/REFERENCE.md`
+  tree, in `main-verify.yml`'s header, and in `sequence-safety.yml`'s concurrency comment.
+  Comment text only in the workflows; the parsed YAML is unchanged.
 
 ### Security
 

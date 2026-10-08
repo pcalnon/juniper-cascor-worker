@@ -17,8 +17,13 @@
 #    Post-merge main-verification net (fanned out from juniper-ml; flood-remediation
 #    analysis §4 item 8; ecosystem rollout plan Wave-2). Runs AFTER a merge lands on main,
 #    so it fires no matter who merged or what they bypassed -- the bypass-proof
-#    compositional-loss net the per-PR advisory screen (sequence-safety.yml) cannot
-#    guarantee. The flood damage class was every-PR-green but serial same-file merges fused
+#    compositional-loss net the per-PR screen (sequence-safety.yml) cannot
+#    guarantee. That screen's `Sequence Safety` context IS a required check in the branch
+#    ruleset, but a ruleset bypass actor can still merge over a red run, and an owner label
+#    (`allow-symbol-loss` / `docs-rewrite`) greens it for one PR; this net honours only the
+#    `Allow-Symbol-Loss:` / `Allow-Docs-Rewrite:` commit trailers. It runs on push to main,
+#    so it is not a PR status check and blocks no merge -- it reports after one.
+#    The flood damage class was every-PR-green but serial same-file merges fused
 #    / silently deleted sibling content, and a deleted test cannot fail, so nothing per-PR
 #    saw it.
 #
