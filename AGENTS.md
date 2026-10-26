@@ -78,6 +78,7 @@ juniper-check-doc-links \
   --exclude fixes \
   --exclude development \
   --exclude CHANGELOG.md \
+  --exclude tmp \
   --cross-repo skip
 
 # Run pre-commit hooks
@@ -204,6 +205,13 @@ ages `/tmp` too.
   derived from `TMPDIR`.
 - Out of scope: GitHub-hosted CI runners and a container's own `/tmp`.
 - Ecosystem rule and rationale: `juniper-ml/notes/JUNIPER_2026-10-26_JUNIPER-ECOSYSTEM_REPO-TMP-DIRECTORY-CONVENTION.md`.
+- **Owner rulings, 2026-10-26** (canonical: the note above): `juniper-check-doc-links` passes `--exclude tmp` and a
+  local Docker build's `.dockerignore` lists `tmp/`; pytest does not ignore it (no `norecursedirs`, `--ignore` or
+  `collect_ignore` names it), and a `grep`/`find` match count includes it. Full-tree repo copies and log-file copies
+  may live there.
+  - **Retention.** A file a work arc writes to `tmp/` is kept until it is no longer needed, no work arc (its own
+    included) uses it, and it is no longer needed for documentation or reference, and, where needed, until it has
+    been archived in an appropriate non-temporary directory. Only then may it be deleted.
 
 ---
 
