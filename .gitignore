@@ -142,6 +142,10 @@ Thumbs.db
 # Temp files
 *.tmp
 *.temp
+
+# The repo's temp root (owner directive 2026-10-26: nothing is ever written under /tmp).
+# Root-anchored, so a nested tmp/ package or fixture directory is never ignored.
+/tmp/
 .~lock.*
 
 # Applications

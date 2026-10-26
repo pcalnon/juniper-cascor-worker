@@ -4,7 +4,7 @@
 
 **Version:** 0.1.0
 **Status:** Active
-**Last Updated:** March 20, 2026
+**Last Updated:** October 26, 2026
 **Project:** Juniper - Distributed CasCor Training Worker
 
 ---
@@ -22,6 +22,7 @@
 - [Public API Reference](#public-api-reference)
 - [Test Details Reference](#test-details-reference)
 - [Worker CLI Flag Reference](#worker-cli-flag-reference)
+- [Worktree Quick Reference](#worktree-quick-reference)
 - [Troubleshooting](#troubleshooting)
 - [Test Markers and Commands](#test-markers-and-commands)
 
@@ -585,6 +586,43 @@ When working on this project, consult these resources based on task type:
 
 ---
 
+## Worktree Quick Reference
+
+Relocated verbatim from `AGENTS.md` on 2026-10-26, to pay for the resident `/tmp` rule's section, so it is read on demand rather than loaded into every session.
+
+**Setup** (full procedure in `notes/WORKTREE_SETUP_PROCEDURE.md`):
+
+```bash
+cd /home/pcalnon/Development/python/Juniper/juniper-cascor-worker
+git fetch origin && git checkout main && git pull origin main
+BRANCH_NAME="feature/my-task"
+git branch "$BRANCH_NAME" main
+REPO_NAME=$(basename "$(pwd)")
+SAFE_BRANCH=$(echo "$BRANCH_NAME" | sed 's|/|--|g')
+WORKTREE_DIR="/home/pcalnon/Development/python/Juniper/worktrees/${REPO_NAME}--${SAFE_BRANCH}--$(date +%Y%m%d-%H%M)--$(git rev-parse --short=8 HEAD)"
+git worktree add "$WORKTREE_DIR" "$BRANCH_NAME"
+cd "$WORKTREE_DIR"
+```
+
+**Cleanup** (full procedure in `notes/WORKTREE_CLEANUP_PROCEDURE_V2.md`):
+
+```bash
+# Phase 1: Push current work
+cd "$OLD_WORKTREE_DIR" && git push origin "$OLD_BRANCH"
+# Phase 2: Create new worktree BEFORE removing old (prevents CWD-trap)
+git fetch origin
+git worktree add "$NEW_WORKTREE_DIR" -b "$NEW_BRANCH" origin/main
+cd "$NEW_WORKTREE_DIR"
+# Phase 3: Create PR (do NOT merge directly to main)
+gh pr create --base main --head "$OLD_BRANCH" --title "<title>" --body "<body>"
+# Phase 4: Cleanup
+git worktree remove "$OLD_WORKTREE_DIR"
+git branch -d "$OLD_BRANCH"
+git worktree prune
+```
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely Cause | Fix |
@@ -648,6 +686,6 @@ isort --check-only juniper_cascor_worker              # Import order
 
 ---
 
-**Last Updated:** March 20, 2026
+**Last Updated:** October 26, 2026
 **Version:** 0.1.0
 **Maintainer:** Paul Calnon
