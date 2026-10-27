@@ -137,26 +137,7 @@ Pre-CFG-06 deployments using the bare `CASCOR_*` (or partial-scope `CASCOR_WORKE
 
 ### Key Files
 
-| File | Purpose |
-|------|---------|
-| `juniper_cascor_worker/cli.py` | CLI entry point (`main`) — dispatches to WebSocket or legacy mode |
-| `juniper_cascor_worker/__init__.py` | Package init — exports public API |
-| `juniper_cascor_worker/config.py` | `WorkerConfig` dataclass with validation and env var loading |
-| `juniper_cascor_worker/worker.py` | `CascorWorkerAgent` (WebSocket) + `CandidateTrainingWorker` (legacy) |
-| `juniper_cascor_worker/ws_connection.py` | `WorkerConnection` — WebSocket lifecycle, TLS, reconnection |
-| `juniper_cascor_worker/task_executor.py` | `execute_training_task()` — CandidateUnit training pipeline |
-| `juniper_cascor_worker/exceptions.py` | Exception hierarchy: `WorkerError`, `WorkerConnectionError`, `WorkerConfigError` |
-| `juniper_cascor_worker/py.typed` | PEP 561 type marker |
-| `pyproject.toml` | Package config, dependencies, tool settings |
-| `CHANGELOG.md` | Version history (0.1.0 through 0.3.0) |
-| `docs/REFERENCE.md` | Complete API and CLI reference |
-| `docs/QUICK_START.md` | 5-minute install and run guide |
-| `docs/DEVELOPER_CHEATSHEET.md` | Quick-reference for common dev tasks |
-| `util/run_coverage.bash` | Local helper that mirrors the CI aggregate coverage gate |
-| `.pre-commit-config.yaml` | Pre-commit hook configuration |
-| `.github/workflows/ci.yml` | CI/CD pipeline |
-| `.github/workflows/sequence-safety.yml` | Per-PR **required** sequence-safety screens (symbol-loss + docs) from `juniper-ci-tools` |
-| `.github/workflows/main-verify.yml` | Post-merge bypass-proof sequence-safety net (screens-only; catch-up base) |
+What each package module, config file, doc, helper script and CI workflow is for. Moved to [`docs/REFERENCE.md` § Key Files Reference](docs/REFERENCE.md#key-files-reference) — read it when working on this area.
 
 ---
 
@@ -207,8 +188,10 @@ ages `/tmp` too.
 - Ecosystem rule and rationale: `juniper-ml/notes/JUNIPER_2026-10-26_JUNIPER-ECOSYSTEM_REPO-TMP-DIRECTORY-CONVENTION.md`.
 - **Owner rulings, 2026-10-26** (canonical: the note above): `juniper-check-doc-links` passes `--exclude tmp` and a
   local Docker build's `.dockerignore` lists `tmp/`; pytest does not ignore it (no `norecursedirs`, `--ignore` or
-  `collect_ignore` names it), and a `grep`/`find` match count includes it. Full-tree repo copies and log-file copies
-  may live there.
+  `collect_ignore` names it). Full-tree repo copies and log-file copies may live there.
+  - A script that counts matches with `grep` or `find` chooses its scope deliberately: the repo with its `tmp/`
+    excluded, or `tmp/` alone; it searches both only for a stated edge case that needs both. Existing counting
+    scripts are to be modified to make that choice explicit, not left to `.gitignore` or a tool's defaults.
   - **Retention.** A file a work arc writes to `tmp/` is kept until it is no longer needed, no work arc (its own
     included) uses it, and it is no longer needed for documentation or reference, and, where needed, until it has
     been archived in an appropriate non-temporary directory. Only then may it be deleted.

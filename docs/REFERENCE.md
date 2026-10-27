@@ -23,6 +23,7 @@
 - [Test Details Reference](#test-details-reference)
 - [Worker CLI Flag Reference](#worker-cli-flag-reference)
 - [Worktree Quick Reference](#worktree-quick-reference)
+- [Key Files Reference](#key-files-reference)
 - [Troubleshooting](#troubleshooting)
 - [Test Markers and Commands](#test-markers-and-commands)
 
@@ -620,6 +621,33 @@ git worktree remove "$OLD_WORKTREE_DIR"
 git branch -d "$OLD_BRANCH"
 git worktree prune
 ```
+
+---
+
+## Key Files Reference
+
+Relocated verbatim from `AGENTS.md` § Quick Reference → Key Files (2026-10-26, to keep the always-loaded file under its memory budget when the owner's revised `tmp/` counting ruling landed) so it is read on demand rather than loaded into every session.
+
+| File | Purpose |
+|------|---------|
+| `juniper_cascor_worker/cli.py` | CLI entry point (`main`) — dispatches to WebSocket or legacy mode |
+| `juniper_cascor_worker/__init__.py` | Package init — exports public API |
+| `juniper_cascor_worker/config.py` | `WorkerConfig` dataclass with validation and env var loading |
+| `juniper_cascor_worker/worker.py` | `CascorWorkerAgent` (WebSocket) + `CandidateTrainingWorker` (legacy) |
+| `juniper_cascor_worker/ws_connection.py` | `WorkerConnection` — WebSocket lifecycle, TLS, reconnection |
+| `juniper_cascor_worker/task_executor.py` | `execute_training_task()` — CandidateUnit training pipeline |
+| `juniper_cascor_worker/exceptions.py` | Exception hierarchy: `WorkerError`, `WorkerConnectionError`, `WorkerConfigError` |
+| `juniper_cascor_worker/py.typed` | PEP 561 type marker |
+| `pyproject.toml` | Package config, dependencies, tool settings |
+| `CHANGELOG.md` | Version history (0.1.0 through 0.3.0) |
+| `docs/REFERENCE.md` | Complete API and CLI reference |
+| `docs/QUICK_START.md` | 5-minute install and run guide |
+| `docs/DEVELOPER_CHEATSHEET.md` | Quick-reference for common dev tasks |
+| `util/run_coverage.bash` | Local helper that mirrors the CI aggregate coverage gate |
+| `.pre-commit-config.yaml` | Pre-commit hook configuration |
+| `.github/workflows/ci.yml` | CI/CD pipeline |
+| `.github/workflows/sequence-safety.yml` | Per-PR **required** sequence-safety screens (symbol-loss + docs) from `juniper-ci-tools` |
+| `.github/workflows/main-verify.yml` | Post-merge bypass-proof sequence-safety net (screens-only; catch-up base) |
 
 ---
 

@@ -32,7 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   owner's rulings on it are applied.** `/tmp/` is ignored, the CPU-lock recipe uses `tmp/`, and `AGENTS.md`
   § Temporary files carries the rule and the rulings, retention included. `juniper-check-doc-links` passes
   `--exclude tmp` in the pre-commit hook, in CI and in the `AGENTS.md` command, and `.dockerignore` lists `tmp/`
-  (beside the `*.tmp` file suffix); nothing keeps pytest or a `grep`/`find` match count out of it.
+  (beside the `*.tmp` file suffix); nothing keeps pytest out of it, and counting scripts are to choose their
+  scope as to `tmp/` deliberately (the owner's revised ruling). To stay under the memory budget, `AGENTS.md`'s
+  Key Files table moved verbatim to `docs/REFERENCE.md`.
 
 ### Fixed
 
