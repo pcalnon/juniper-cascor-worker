@@ -119,6 +119,11 @@ minversion = "6.0"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
+# Unset, pytest-asyncio warns at configure time. pytest 9.2.0 (PyPI 2026-10-27)
+# turns that warning into an INTERNALERROR under filterwarnings "error" below,
+# before any test is collected; 9.1.1 tolerated it. "function" is the scope the
+# suite's only async fixture (tests/test_http_health.py server_factory) gets.
+asyncio_default_fixture_loop_scope = "function"
 addopts = [
     "-ra",
     "-q",
