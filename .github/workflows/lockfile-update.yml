@@ -246,12 +246,21 @@ jobs:
           # `git push` had the same protection).
           HEAD_OID=$(git rev-parse HEAD)
 
+          # Encode on their own lines: a failure inside "$(...)" passed as a jq argument does
+          # not trip `set -e`, and an empty payload would commit an empty lockfile (flood-3 §4).
+          LOCK_B64=$(base64 -w0 requirements.lock)
+          CPU_LOCK_B64=$(base64 -w0 requirements-cpu.lock)
+          if [ -z "${LOCK_B64}" ] || [ -z "${CPU_LOCK_B64}" ]; then
+            echo "::error::base64 produced an empty payload -- lockfiles NOT committed"
+            exit 1
+          fi
+
           jq -n \
             --arg repo "${GITHUB_REPOSITORY}" \
             --arg branch "${BRANCH}" \
             --arg oid "${HEAD_OID}" \
-            --arg contents "$(base64 -w0 requirements.lock)" \
-            --arg cpu_contents "$(base64 -w0 requirements-cpu.lock)" \
+            --arg contents "${LOCK_B64}" \
+            --arg cpu_contents "${CPU_LOCK_B64}" \
             '{query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url } } }",
               variables: {input: {
                 branch: {repositoryNameWithOwner: $repo, branchName: $branch},

@@ -232,7 +232,7 @@ Example mention on an issue or pull request comment:
 
 Permissions on the job are `contents: write`, `pull-requests: write`, `issues: write`, `id-token: write`, and `actions: read`. Checkout is SHA-pinned and sets `fetch-depth: 1`, so the run sees the tip commit.
 
-The action step (`id: claude`) passes one input, `anthropic_api_key`, from `secrets.ANTHROPIC_API_KEY`. The workflow header says to set that secret at org level and to confirm this repo can read it. This repository is owned by a user account, so no organization secret reaches it: `ANTHROPIC_API_KEY` has to be a repository secret (list the names with `gh api repos/pcalnon/juniper-cascor-worker/actions/secrets --jq '.secrets[].name'`). The step sets no prompt path, model, or tool allow-list.
+The action step (`id: claude`) passes one input, `anthropic_api_key`, from `secrets.ANTHROPIC_API_KEY`. The workflow header names it as a repository secret. This repository is owned by a user account, so no organization secret reaches it: `ANTHROPIC_API_KEY` has to be a repository secret (list the names with `gh api repos/pcalnon/juniper-cascor-worker/actions/secrets --jq '.secrets[].name'`). The step sets no prompt path, model, or tool allow-list.
 
 The `github-actions` updates in `.github/dependabot.yml` group only `github/codeql-action*`. An `anthropics/claude-code-action` bump therefore opens its own pull request. A healthy bump moves the `uses:` SHA and the adjacent version comment together. The pinned SHA stays in the workflow file.
 

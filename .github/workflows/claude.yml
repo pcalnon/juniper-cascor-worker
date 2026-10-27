@@ -8,8 +8,8 @@
 #    the `@claude` PR / issue assistant. The action invocation is generic;
 #    no per-repo customization is needed.
 #
-#    Required secret: ANTHROPIC_API_KEY (set at the org level; verify the
-#    target repo can read the org secret before relying on this).
+#    Required secret: ANTHROPIC_API_KEY, as a REPOSITORY secret. Juniper repos are
+#    user-owned, so no organization secret can reach them.
 #
 #    Source-of-truth copy: juniper-ml/.github/workflows/claude.yml.
 #####################################################################################################################################################################################################
@@ -48,6 +48,6 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@e4a6faad497d33dbc7144135c75e41f82f0bf6c0  # v1.0.255
+        uses: anthropics/claude-code-action@16f9f71ab9c490faf367f94dd294897edc25be33  # v1.0.261
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
