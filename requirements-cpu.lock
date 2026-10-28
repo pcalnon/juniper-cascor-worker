@@ -50,7 +50,7 @@ annotated-types==0.8.0
     # via
     #   -c requirements.lock
     #   pydantic
-filelock==4.0.1
+filelock==4.2.4
     # via
     #   -c requirements.lock
     #   torch
@@ -74,7 +74,7 @@ juniper-config-tools==0.1.0
     # via
     #   -c requirements.lock
     #   juniper-cascor-worker (pyproject.toml)
-markupsafe==3.0.3
+markupsafe==3.0.4
     # via
     #   -c requirements.lock
     #   jinja2
@@ -86,17 +86,17 @@ networkx==3.7
     # via
     #   -c requirements.lock
     #   torch
-numpy==2.5.3
+numpy==2.5.4
     # via
     #   -c requirements.lock
     #   juniper-cascor-worker (pyproject.toml)
     #   juniper-cascor-model
     #   juniper-cascor-protocol
-pydantic==2.13.5
+pydantic==2.14.1
     # via
     #   -c requirements.lock
     #   juniper-cascor-protocol
-pydantic-core==2.46.5
+pydantic-core==2.50.1
     # via
     #   -c requirements.lock
     #   pydantic
@@ -104,7 +104,7 @@ pyyaml==6.0.3
     # via
     #   -c requirements.lock
     #   juniper-cascor-model
-setuptools==84.0.0
+setuptools==84.2.1
     # via
     #   -c requirements.lock
     #   torch
@@ -123,7 +123,7 @@ typing-inspection==0.4.4
     # via
     #   -c requirements.lock
     #   pydantic
-websockets==17.1
+websockets==17.3
     # via
     #   -c requirements.lock
     #   juniper-cascor-worker (pyproject.toml)
