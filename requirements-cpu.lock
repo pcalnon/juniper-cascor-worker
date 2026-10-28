@@ -16,12 +16,12 @@
 # asserts that set equality, so regenerating ONE lock without the other fails the build.
 #
 # Regeneration command (run from the repo root, AFTER requirements.lock is current):
-#   echo "torch==2.14.0+cpu" > /tmp/torch-cpu-override
+#   echo "torch==2.14.0+cpu" > tmp/torch-cpu-override
 #   uv pip compile pyproject.toml \
 #     --index-strategy unsafe-best-match \
 #     --extra-index-url https://download.pytorch.org/whl/cpu \
 #     --no-emit-package torch \
-#     --override /tmp/torch-cpu-override \
+#     --override tmp/torch-cpu-override \
 #     --constraint requirements.lock \
 #     --python-version 3.14 \
 #     -o requirements-cpu.lock

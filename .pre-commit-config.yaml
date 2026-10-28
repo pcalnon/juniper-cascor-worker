@@ -264,6 +264,10 @@ repos:
           - development
           - --exclude
           - CHANGELOG.md
+          # The repo's gitignored tmp/ (owner ruling, 2026-10-26): the checker walks the tree, not git's
+          # files, so scratch under tmp/ would be scanned and fail.
+          - --exclude
+          - tmp
           - --cross-repo
           - skip
         pass_filenames: false

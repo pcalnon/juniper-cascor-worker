@@ -66,6 +66,8 @@ logs/
 images/
 
 # Temporary files
+# The repo's gitignored temp root (owner ruling, 2026-10-26); `*.tmp` below is a file suffix, not this directory.
+tmp/
 *.tmp
 *.temp
 *.log

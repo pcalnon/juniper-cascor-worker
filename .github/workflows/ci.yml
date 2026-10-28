@@ -138,6 +138,7 @@ jobs:
             --exclude fixes \
             --exclude development \
             --exclude CHANGELOG.md \
+            --exclude tmp \
             --cross-repo skip
 
       # Catches the failure class that broke 3 juniper-X CIs on
