@@ -69,6 +69,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A failing informational Python 3.15 leg no longer shows as a failed check** (the owner's report of 2026-11-15:
+  the 3.15 tests "are supposed to produce an informational message without affecting the ability of code to commit,
+  push, PR, or merge"). The job-level `continue-on-error` that came with the legs keeps the Quality Gate's
+  `needs.<job>.result` green, but on its own a failing leg's check still concludes `failure`: the pull request shows
+  a red X and "Some checks were not successful", its merge state reads `UNSTABLE`, and `gh pr checks` and any tool
+  that reads every check call it failing. `ci.yml`'s two 3.15 legs pass on `main` today, so none shows red yet; the
+  first 3.15 failure would have.
+  - Every step of `ci.yml`'s `unit-tests` and `integration-tests` and of `scheduled-tests.yml`'s
+    `slow-or-integration-tests` now carries an `id` and `continue-on-error: ${{ matrix.experimental == true }}`, so
+    on the 3.15 leg a failing step neither stops the job nor turns its check red. A last step, `Report the
+    informational Python 3.15 result` (`if: always() && matrix.experimental == true`), reports each failed step as a
+    `::warning` annotation and as a table in the job summary, and emits a `::notice` when every step passed. The
+    blocking legs are unchanged: the expression is false on them.
+  - Measured on juniper-ml#2578 (head `91591864`): its `Regression Tests (Python 3.15)` check concluded `success`
+    while two of its steps failed, and carried the warning annotation naming them.
+  - Applied by juniper-ml's `util/ad-hoc/2026-11-15_py315_informational_green_legs.py` (juniper-ml#2578), a textual
+    edit checked by re-parsing the workflow: the same steps in the same order plus the report step, and no other job
+    changed. `tests/test_dockerfile_cpu_torch_pin.py` still finds `unit-tests`' `Install dependencies` step by name.
+
 - **`lockfile-update.yml` regenerated the locks on release-proposal PRs.** Its `pull_request`
   arm fires on any `pyproject.toml` change, and a release proposal's version bump is one, so the
   `--upgrade` regen ran on `release/**` branches and committed whatever upstream had moved. The
