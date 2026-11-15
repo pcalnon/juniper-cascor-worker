@@ -6,7 +6,7 @@
 **License**: MIT License
 **Version**: 0.6.1
 **Python**: >=3.11 (supports 3.11, 3.12, 3.13, 3.14)
-**Last Updated**: 2026-11-14
+**Last Updated**: 2026-11-15
 
 ---
 
@@ -256,7 +256,7 @@ Per-suite detail: what each test file covers and the marker it carries. Moved to
 
 ### Security Scanning (`.github/workflows/security-scan.yml`)
 
-**Schedule**: Weekly (Monday 08:00 UTC). Runs Bandit, pip-audit, and Gitleaks.
+**Schedule**: Weekly (Monday 06:00 UTC) and manual dispatch. Runs Bandit and pip-audit. Gitleaks runs only in `ci.yml`'s `security` job.
 
 ### Publishing (`.github/workflows/publish.yml`)
 

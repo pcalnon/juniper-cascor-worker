@@ -654,18 +654,159 @@ jobs:
           fetch-depth: 0
 
       - name: Run Gitleaks (Secrets Detection)
+        # A pull request is scanned by the two steps after this one instead:
+        # the action's own pull_request path never reaches past the pull
+        # request's 30th commit, and at any length its --first-parent walk
+        # drops what a merge brought in (see "Run Gitleaks over the pull
+        # request"). `push` and `workflow_dispatch`, this workflow's other two
+        # events, still run the action.
+        if: github.event_name != 'pull_request'
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # gitleaks-action v2.3.9 ships as a Node.js 20 action.
-          # GitHub forces Node 24 on 2026-06-02; opt in now to eliminate
-          # the deprecation warning and ensure continued operation past
-          # the cutover. Drop this once gitleaks-action publishes a
-          # release pinned to node24 (upstream PR #215).
+          # v3.0.0's action.yml already declares `using: "node24"`, so this
+          # opt-in (added for v2.3.9's Node 20) no longer changes anything.
+          # It stays so that this change leaves the action's environment as
+          # it was; drop it in a change of its own.
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-        # gitleaks-action v2.3.9 has no `fail` input — passing it triggers
-        # "Unexpected input(s) 'fail'" warnings in CI. The action exits
-        # non-zero on leaks by default, which is the behavior we want.
+          # The engine version, stated rather than inherited: gitleaks-action
+          # v3.0.0 defaults to this same 8.24.3 (src/index.js at the pinned
+          # SHA), but a bump of the action SHA would change it silently, and
+          # split the engine between pushes and pull requests.
+          # tests/test_gitleaks_pr_scan.py pins it, and pins the pull-request
+          # install below to the same version.
+          GITLEAKS_VERSION: "8.24.3"
+        # The action declares no inputs (action.yml at the pinned SHA), so
+        # there is no `fail:` to pass; it exits non-zero on a leak by itself.
+        # What it scans (src/index.js / src/gitleaks.js at the pinned SHA):
+        # `push` scans `--no-merges --first-parent <first>^..<last>` across the
+        # push payload's commits (`-1` when it holds one); `workflow_dispatch`
+        # passes no --log-opts, so it scans EVERY commit reachable from every
+        # branch and tag of this fetch-depth-0 checkout. This repository has
+        # no .gitleaks.toml and no .gitleaksignore, so the engine runs its
+        # built-in ruleset; it would auto-discover either at the repo root.
+
+      - name: Install Gitleaks (pull request)
+        # The same engine the action installs, fetched by version and checked
+        # against the release's published SHA-256 (the linux_x64 line of
+        # gitleaks_8.24.3_checksums.txt) before anything runs it. A bump moves
+        # GITLEAKS_VERSION here and on the action step, and this digest,
+        # together: tests/test_gitleaks_pr_scan.py pins all three. On PATH it
+        # is also the binary the Gitleaks self-test runs on a pull request.
+        if: github.event_name == 'pull_request'
+        env:
+          GITLEAKS_VERSION: "8.24.3"
+          GITLEAKS_SHA256: "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c"
+        run: |
+          if [ "${RUNNER_OS}/${RUNNER_ARCH}" != "Linux/X64" ]; then
+            echo "::error title=Gitleaks::the pinned digest is for linux_x64, and this runner is ${RUNNER_OS}/${RUNNER_ARCH}"
+            exit 1
+          fi
+          asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          dest="${RUNNER_TEMP}/gitleaks-${GITLEAKS_VERSION}"
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 5 --max-time 120 \
+            --output "${RUNNER_TEMP}/${asset}" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${asset}"
+          echo "${GITLEAKS_SHA256}  ${RUNNER_TEMP}/${asset}" | sha256sum --check --strict
+          mkdir -p "${dest}"
+          tar -xzf "${RUNNER_TEMP}/${asset}" -C "${dest}" gitleaks
+          echo "${dest}" >> "${GITHUB_PATH}"
+          "${dest}/gitleaks" version
+
+      - name: Run Gitleaks over the pull request (Secrets Detection)
+        # gitleaks-action v3.0.0 lists a pull request's commits with ONE
+        # unpaginated call, GET /repos/{owner}/{repo}/pulls/{n}/commits (30
+        # per page by default, oldest first), and scans
+        # `--no-merges --first-parent <first>^..<last>` across that page
+        # (src/gitleaks.js at the pinned SHA). Commit 31 onwards is never
+        # scanned, and because the walk starts from the page's last commit,
+        # --first-parent drops every commit a merge brought into the branch
+        # on a pull request of any length: on juniper-ml#1797 (88 commits) it
+        # scanned 12, and 11 of those were already on main. This step scans
+        # every commit in base..head from the event payload instead, with the
+        # action's detect flags (not its --no-merges --first-parent), the
+        # same auto-discovered .gitleaks.toml and .gitleaksignore (this
+        # repository has neither, so the built-in ruleset), and the action's
+        # outcomes: a leak fails the step with 1, any other gitleaks failure
+        # with its own code.
+        # --remerge-diff (git 2.36 or later) gives each two-parent merge
+        # commit in the range a patch of what it changed beyond a plain
+        # re-merge of its parents, such as a conflict resolution, which
+        # `git log -p` alone prints for no merge commit; a clean merge prints
+        # nothing. git prints no such patch for an octopus merge (`diff:
+        # warning: Skipping remerge-diff for octopus merges.`), so the step
+        # refuses a range that holds one.
+        # The engine runs git through a filter that deletes the notes
+        # --remerge-diff writes into a merge's file headers (`remerge
+        # CONFLICT ...`, `remerge warning: ...`). gitleaks 8.24.3 parses the
+        # log with go-gitdiff v0.9.1, which ends a file header at a line it
+        # does not know and re-reads any preamble holding the word "commit"
+        # as a commit header. With the notes left in, a finding in the
+        # conflicted file was named b/<path>, and a note naming
+        # .pre-commit-config.yaml, or quoting a parent subject such as
+        # "pre-commit autoupdate", dropped the merge's SHA from that finding
+        # and every later one in the merge: their fingerprints were then
+        # file-scoped, and no .gitleaksignore entry could match them. In
+        # `git log -p` output no patch line and no commit-message line starts
+        # with "remerge ", so the filter deletes nothing the engine scans
+        # (8.24.3 runs git only for log -p and ls-remote --get-url; the filter
+        # edits every call's stdout, so an engine bump re-checks that list).
+        # It passes git's stderr through and, with pipefail, git's exit
+        # status: gitleaks fails on any git log stderr line, and reads the
+        # exit status of `git ls-remote --get-url` to tell a missing remote
+        # from a failure.
+        # fetch-depth: 0 above is what puts both SHAs in the checkout.
+        # The shell below is juniper-data's (juniper-data#530), unchanged;
+        # tests/test_gitleaks_pr_scan.py runs it against the real engine.
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_COMMITS: ${{ github.event.pull_request.commits }}
+        run: |
+          for sha in "${BASE_SHA}" "${HEAD_SHA}"; do
+            if ! [[ "${sha}" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "::error title=Gitleaks::'${sha}' is not a commit in this checkout, so the pull request cannot be scanned"
+              exit 1
+            fi
+          done
+          range="${BASE_SHA}..${HEAD_SHA}"
+          count="$(git rev-list --count "${range}")"
+          echo "Scanning ${count} commit(s) in ${range}; the pull request reports ${PR_COMMITS}."
+          if [ "${count}" != "${PR_COMMITS}" ]; then
+            echo "::warning title=Gitleaks::${range} holds ${count} commit(s), and the pull request reports ${PR_COMMITS}"
+          fi
+          octopus="$(git rev-list --count --min-parents=3 "${range}")"
+          if [ "${octopus}" != "0" ]; then
+            echo "::error title=Gitleaks::${range} holds ${octopus} octopus merge(s): --remerge-diff prints no patch for a merge of three or more parents, so what it changed itself cannot be scanned; replace it with two-parent merges"
+            exit 1
+          fi
+          real_git="$(command -v git)"
+          filter="${RUNNER_TEMP:?}/gitleaks-git-filter"
+          mkdir -p "${filter}"
+          cat > "${filter}/git" <<'FILTER'
+          #!/usr/bin/env bash
+          set -o pipefail
+          "${REAL_GIT:?}" "$@" | LC_ALL=C sed -e '/^remerge /d'
+          FILTER
+          chmod +x "${filter}/git"
+          mkdir -p reports/security
+          rc=0
+          REAL_GIT="${real_git}" PATH="${filter}:${PATH}" gitleaks detect --redact -v --exit-code=2 --report-format=sarif --report-path=reports/security/gitleaks.sarif --log-level=debug "--log-opts=--remerge-diff ${range}" || rc=$?
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            printf '### Gitleaks\n\n%s commit(s) scanned in %s; gitleaks exited %s.\n' "${count}" "${range}" "${rc}" >> "${GITHUB_STEP_SUMMARY}"
+          fi
+          case "${rc}" in
+            0) ;;
+            2)
+              echo "::error title=Gitleaks::leaks detected in ${range}; the redacted findings are in this log and in reports/security/gitleaks.sarif"
+              exit 1
+              ;;
+            *)
+              echo "::error title=Gitleaks::gitleaks exited ${rc}, which is not a scan result"
+              exit "${rc}"
+              ;;
+          esac
 
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
@@ -789,6 +930,36 @@ jobs:
             fi
             exit 1
           fi
+
+      - name: Install the package and its test extra (Gitleaks self-test)
+        # The self-test below runs under this repository's pytest config and
+        # tests/conftest.py, which imports juniper_cascor_worker, so it needs
+        # the package with its dependencies and the `test` extra (pytest,
+        # pytest-asyncio for `asyncio_mode` under --strict-config,
+        # pytest-timeout, PyYAML). Nothing earlier in this job installs them.
+        # It runs AFTER pip-audit: torch is then the CPU build that step
+        # installed, which `torch>=2.10.0` accepts, so this pulls no torch
+        # from PyPI, and nothing it installs reaches the requirements.txt
+        # that pip-audit has already audited. tests/test_gitleaks_pr_scan.py
+        # pins that order.
+        run: pip install -e ".[test]"
+
+      - name: Gitleaks pull-request scan self-test (real engine)
+        # The unit-test job runs this file too (its `pytest tests/` selects
+        # every file there), but with no gitleaks binary its real-engine cases
+        # skip. Here the binary is on PATH (the action put it there, or on a
+        # pull request the Install Gitleaks step did), and
+        # GITLEAKS_PARITY_REQUIRED turns a missing binary into a failure
+        # instead of a skip, because a check that could not run is not a pass:
+        # with the ruleset this repository's scan loads, the pull-request scan
+        # step's own shell must find a token in the 35th commit of a 35-commit
+        # range, one a merge brought in, and one that a merge commit itself
+        # added. After the install step above, which brings pytest and PyYAML.
+        # Two -v, because pyproject.toml's addopts carry a -q; --timeout=120,
+        # because its `timeout = 30` is too short for the real-engine cases.
+        env:
+          GITLEAKS_PARITY_REQUIRED: "1"
+        run: python -m pytest tests/test_gitleaks_pr_scan.py -v -v --timeout=120
 
       - name: Upload Security Reports
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
