@@ -76,10 +76,16 @@ jobs:
       - name: Run slow / integration tests
         id: run-slow-integration-tests
         continue-on-error: ${{ matrix.experimental == true }}
+        # The selector is ``integration`` alone, as the template's TODO 2
+        # says for a repo without ``slow`` markers. This repo registers no
+        # ``slow`` marker, and from pytest 9.2.0 an unregistered marker in
+        # a ``-m`` expression is a usage error under ``--strict-markers``
+        # (exit 4): ``-m "slow or integration"`` failed every leg of every
+        # nightly run from 2026-10-28.
         run: |
           mkdir -p reports/junit
           python -m pytest \
-            -m "slow or integration" \
+            -m integration \
             --tb=short \
             --maxfail=10 \
             --junitxml=reports/junit/junit-slow.xml
