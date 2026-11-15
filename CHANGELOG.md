@@ -132,6 +132,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   text only: `claude.yml` parses identically, and `main-verify.yml` differs only in shell comment
   lines inside its `run:` blocks. Both are flood-3 §4 rows; §4 had left this repo's resolver
   unchecked, and it implements the screened tier.
+- **Gitleaks scans a pull request's whole `base..head`, merge commits included** (the port of juniper-data#530 under
+  ruling 10 in section 8 of juniper-ml's `notes/JUNIPER_2026-11-06_JUNIPER-ECOSYSTEM_CURSOR-FLOOD-4-DISPOSITION.md`).
+  On `pull_request`, `gitleaks/gitleaks-action` at `e0c47f4f` (v3.0.0) lists the pull request's commits with one
+  unpaginated request (30 per page) and scans `--no-merges --first-parent <first>^..<last>` across that page, so
+  commit 31 onwards is never scanned, a commit a merge brought into the branch is dropped, and no merge commit's own
+  changes are scanned. The first two are latent here: of the 227 pull requests before this change (#1 to #229, read
+  on 2026-11-15) the largest has 8 commits, and every one of the 25 merge commits merges `main` into its pull request.
+  The third gap is real: no pull-request scan here saw what those merge commits changed themselves (#217, six
+  commits, three of them merges of `main`, logged `3 commits scanned.`).
+  - `ci.yml`'s `security` job (`Security Scans`, a required check; its name, `needs`, `permissions` and checkout are
+    unchanged): the action skips `pull_request` and sets `GITLEAKS_VERSION: "8.24.3"`, the version it already
+    resolved to, so a bump of the action SHA cannot split the engine between events; `push` and `workflow_dispatch`
+    still run it. Two new steps, juniper-data's shell unchanged, install the same 8.24.3 checked against the
+    release's SHA-256 and scan every commit of the event's `base..head` with `--remerge-diff`, behind a `git` filter
+    that deletes git's `remerge` notes, refusing octopus merges and SHAs the checkout does not hold. The action
+    step's comments described v2.3.9 and now describe v3.0.0; `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` stays.
+  - On a pull request the report is `gitleaks.sarif` in the existing `security-reports` artifact. The action's own
+    `gitleaks-results.sarif` artifact is still uploaded on `push` and `workflow_dispatch`, and no longer on a pull
+    request.
+  - `tests/test_gitleaks_pr_scan.py` (new, 26 cases: juniper-data-client#260's file and one case of this
+    repository's): seven static cases pin the wiring, a leak failing the required check included; eleven run the scan
+    step's own shell with a stand-in engine; eight run it with the real engine. The unit lane's `pytest tests/`
+    collects it on every leg, where the real-engine cases skip. After pip-audit, two new steps install the package
+    with its `test` extra (`tests/conftest.py` imports it, and the job installed no pytest) and run the file with
+    `GITLEAKS_PARITY_REQUIRED=1` on every event. `util/ad-hoc/2026-11-14_verify_gitleaks_pr_scan_tests_are_not_vacuous.py`
+    is its mutation check; CI does not call it.
+  - `docs/DEVELOPER_CHEATSHEET.md` (1.1.3) gains § Secret scan (Gitleaks). `AGENTS.md` no longer says the weekly
+    `security-scan.yml` runs Gitleaks, at 08:00: it runs Bandit and pip-audit, on Mondays at 06:00 UTC.
 
 ### Security
 

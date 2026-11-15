@@ -1,7 +1,7 @@
 # Developer Cheatsheet — juniper-cascor-worker
 
-**Version**: 1.1.2
-**Date**: 2026-11-14
+**Version**: 1.1.3
+**Date**: 2026-11-15
 **Project**: juniper-cascor-worker
 
 ---
@@ -33,12 +33,56 @@
 
 Security scan behavior:
 
-- `ci.yml` runs Gitleaks, Bandit SARIF upload, and pip-audit as the PR-facing `security` job.
+- `ci.yml` runs Gitleaks, Bandit SARIF upload, and pip-audit as the PR-facing `security` job. [Secret scan (Gitleaks)](#secret-scan-gitleaks) below says what Gitleaks scans on each event.
 - Bandit writes `reports/security/bandit.sarif`; `github/codeql-action/upload-sarif` publishes it to GitHub code scanning.
 - `codeql.yml` uses the CodeQL `init`, `autobuild`, and `analyze` actions for Python.
 - GitHub Actions are SHA-pinned with version comments. Dependabot bumps should update both the pinned SHA and the trailing version comment together.
 - The pip-audit jobs currently ignore `CVE-2026-3219` for the runner-provided pip version until an upstream fix is available; re-check that exception when changing the audit workflow.
 - `@claude` mentions are handled by `.github/workflows/claude.yml`. The mention gate, permissions, and secret input are in [Claude Code workflow](#claude-code-workflow).
+
+### Secret scan (Gitleaks)
+
+Gitleaks runs in one place, the `security` job (`Security Scans`, a required check) of `.github/workflows/ci.yml`. The weekly `security-scan.yml` does not run it. The engine is gitleaks **8.24.3** on every event. This repository has no `.gitleaks.toml` and no `.gitleaksignore`, so the engine runs its built-in ruleset (`no gitleaks config found in path .gitleaks.toml, using default gitleaks config` in the job log). It would auto-discover either file at the repo root, and a `.gitleaks.toml` without `[extend] useDefault = true` loads only the rules written in it.
+
+| Event | Step | What is scanned |
+|-------|------|-----------------|
+| `push` to `main` / `develop` | `gitleaks/gitleaks-action` at `e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e` (v3.0.0) | `--no-merges --first-parent <first>^..<last>` across the push payload's commits, `git log -1` when the payload holds one commit, and nothing when it holds none |
+| `workflow_dispatch` | The same action | No `--log-opts`, so every commit reachable from every branch and tag of the `fetch-depth: 0` checkout |
+| `pull_request` | `Install Gitleaks (pull request)`, then `Run Gitleaks over the pull request (Secrets Detection)` | Every commit in `<base>..<head>`, from the event payload's `pull_request.base.sha` and `pull_request.head.sha`, with `--remerge-diff`, which adds what each two-parent merge commit changed itself |
+
+**Engine pin.** The action step sets `GITLEAKS_VERSION: "8.24.3"`. That is the action's own default at the pinned SHA and the version its log named here before the variable was set (`gitleaks version: 8.24.3` on pull request #228's run and on the `push` run that followed, 2026-11-15), so no engine changes. It is set so that a bump of the action SHA cannot move the engine on `push` while pull requests stay on the installed one. The install step carries the same version and `GITLEAKS_SHA256` (`9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c`, the `linux_x64` line of the release's `gitleaks_8.24.3_checksums.txt`), and runs `sha256sum --check --strict` before it unpacks the tarball. A bump moves both versions and the digest together.
+
+**Pull requests.** The two pull-request steps are juniper-data's (juniper-data#530), ported under ruling 10 in section 8 of juniper-ml's `notes/JUNIPER_2026-11-06_JUNIPER-ECOSYSTEM_CURSOR-FLOOD-4-DISPOSITION.md`; the scan step's shell is unchanged. gitleaks-action lists a pull request's commits with one unpaginated request (30 per page, oldest first) and scans `--no-merges --first-parent <page[0]>^..<page[-1]>`: commit 31 onwards is never scanned, and from the page's last commit `--first-parent` drops every commit a merge brought into the branch. Neither loss has happened in this repository. Of the 227 pull requests before this change (#1 to #229, read on 2026-11-15; #97 and #197 are issues), the largest had 8 commits, and in each of the 22 that hold a merge commit every merge's first parent is the pull request's own previous commit, with no side branch of the pull request merged in. What no pull-request scan here saw is what those 25 merge commits changed themselves, because the action passes `--no-merges`: #217 (six commits, three of them merges of `main`) logged `3 commits scanned.`. The scan step:
+
+- refuses a base or head SHA that is not a 40-hex commit in the checkout, before it scans
+- logs `Scanning N commit(s) in <base>..<head>; the pull request reports M.`, and warns when N and M differ
+- refuses a range that holds an octopus merge, for which git prints no `--remerge-diff` patch
+- puts a `git` filter first on the engine's `PATH`, which deletes the `remerge ...` notes git writes into a merge's file headers and exits with `git`'s status; with the notes left in, gitleaks 8.24.3 can report a finding in a merge's own changes as `b/<path>`, or without its commit
+- runs the action's detect flags with `--log-opts=--remerge-diff <base>..<head>` and the report at `reports/security/gitleaks.sarif`
+- fails the way the action does: a leak (gitleaks exit 2) fails the step with 1, and any other non-zero gitleaks exit fails it with that code
+
+The scan makes no API call and reads no token. A finding is in the step log, with its `Fingerprint:` line, and in the report; the job summary carries the range's commit count and gitleaks' exit code. Gitleaks' own `N commits scanned.` counts only the commits for which `git log -p` printed a patch of a text file that is not a deletion, so it is smaller than N when the range holds clean merges of `main`.
+
+**Reports.** On a pull request the redacted report is `gitleaks.sarif` in the `security-reports` artifact (30 days), beside `bandit.sarif`, pip-audit's `requirements.txt` and `pip-audit.log`. The action's own `gitleaks-results.sarif` artifact is still uploaded on `push` and `workflow_dispatch`, and no longer on a pull request.
+
+**Tests.** `tests/test_gitleaks_pr_scan.py` has 26 cases. Seven read `ci.yml`: the engine version on both paths, the digest and its whole check line, the action's `if` and the workflow's events, the scan's event range and step order, `fetch-depth: 0`, the unit lane's unfiltered `pytest tests/`, the self-test's install after pip-audit, and the wiring that makes a leak fail the required check (the job keeps the name `Security Scans` with no `if` and no `continue-on-error`; the install, the scan and the self-test carry no `continue-on-error`; the self-test's `run:` is exactly the command below; `Upload Security Reports` runs under `if: always()` on `reports/security/`, after the scan). Eleven run the scan step's own `run:` under `bash -e` with a stand-in `gitleaks`, and eight run it with the real engine in a scratch repository. Two lanes run the file. The `unit-tests` job collects all of `tests/` on each leg, where the eight real-engine cases skip with no `gitleaks` on `PATH`. In the `security` job, after pip-audit, `Install the package and its test extra (Gitleaks self-test)` runs `pip install -e ".[test]"` (`tests/conftest.py` imports the package), and the self-test runs the file with `GITLEAKS_PARITY_REQUIRED=1`, which turns a missing binary into a failure:
+
+```bash
+GITLEAKS_PARITY_REQUIRED=1 python -m pytest tests/test_gitleaks_pr_scan.py -v -v --timeout=120
+```
+
+The binary is the one the action put on `PATH`, or on a pull request the one the install step put there. Locally, set `GITLEAKS_BIN` to a gitleaks 8.24.3 binary. `util/ad-hoc/2026-11-14_verify_gitleaks_pr_scan_tests_are_not_vacuous.py` undoes one property at a time, nearly always by an edit of `ci.yml`, and shows the cases that pin it fail; CI does not call it.
+
+**A finding that is a false positive.** Commit a `.gitleaksignore` at the repo root holding the finding's `Fingerprint:` line as the log prints it, `<40-hex commit>:<file>:<rule>:<line>`, under a comment that names the class. A fingerprint that does not start with a commit is file-scoped and would hide a later secret on that line: never add one.
+
+**Not covered on a pull request**, as before this change: a commit that a force-push removed from the branch before any run scanned it (juniper-data#536 tracks that gap), and whatever a `.gitleaks.toml` or `.gitleaksignore` added by the pull request itself allows, because the scan reads both from the merge checkout. On `push`, the action's `--first-parent` still leaves out the commits a merge commit brought in.
+
+**When a step fails.**
+
+- `Install Gitleaks (pull request)` fails at `sha256sum`: the downloaded tarball does not match `GITLEAKS_SHA256`. After an engine bump, set `GITLEAKS_VERSION` on this step and on the action step, and take the digest from the `linux_x64` line of the new release's `gitleaks_<version>_checksums.txt`, never from the file the runner downloaded.
+- The scan fails with `is not a commit in this checkout`: check that the job's checkout still sets `fetch-depth: 0`.
+- The scan fails with `octopus merge(s)`: redo the merge as two-parent merges, one branch at a time, and push.
+- The self-test errors at setup with `GITLEAKS_PARITY_REQUIRED=1 but no gitleaks binary`: neither path put the binary on `PATH`.
 
 ---
 
@@ -248,7 +292,7 @@ Local Claude Code session rules (thread handoff, worktrees) live in `AGENTS.md`.
 4. `integration-tests` on Python 3.12, 3.13, and 3.14, plus an informational Python 3.15 leg whose failure blocks nothing. Failures are reported as warnings during the shakedown cycle.
 5. `build`, which builds wheel and sdist artifacts and runs `twine check`.
 6. `dependency-docs`, which runs `juniper-generate-dep-docs` and uploads generated dependency files.
-7. `security`, which runs Gitleaks, Bandit SARIF upload, and `pip-audit`.
+7. `security`, which runs Gitleaks, Bandit SARIF upload, `pip-audit`, and the Gitleaks self-test ([Secret scan (Gitleaks)](#secret-scan-gitleaks)).
 8. `lockfile-check`, which verifies committed lockfiles still satisfy `pyproject.toml`.
 
 When a PR fails the quality gate, inspect the failed upstream job first; `required-checks` usually only reports the aggregate failure.
