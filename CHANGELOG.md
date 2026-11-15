@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CI runs the tests on Python 3.15 as well, as informational legs that block nothing.** Phase 1 of the ecosystem's
+  Python 3.15 migration (the owner's request of 2026-11-14): 3.15 results are reported, and no merge, commit or
+  deployment waits on them.
+  - `ci.yml`'s `unit-tests` gains `Unit Tests + Coverage (Python 3.15 on ubuntu-latest)`, an `include` entry with
+    `experimental: true`. The job's existing `continue-on-error: ${{ matrix.experimental == true }}` applies to that
+    leg alone, so a red 3.15 leg leaves `needs.unit-tests.result`, the Quality Gate and `build` unchanged. The context
+    is not in ruleset 14250447. The comment above `continue-on-error` no longer says the macOS leg is in its soak,
+    which #40 ended on 2026-05-01.
+  - `ci.yml`'s `integration-tests` gains `Integration Tests (Python 3.15)` the same way, with a new job-level
+    `continue-on-error: ${{ matrix.experimental == true }}`. The ruleset requires the 3.12, 3.13 and 3.14 contexts,
+    whose names are unchanged.
+  - `scheduled-tests.yml`'s `Slow / Integration Tests` matrix gains the same informational 3.15 leg. Its job name now
+    spells out the `(<version>)` suffix GitHub used to append, so the three existing legs post the same names.
+  - The pattern was measured on juniper-data#538 (run 43655144734): with the 3.15 leg failed on purpose, the leg's
+    check read `failure`, that repository's Quality Gate printed `Unit Tests: success` and passed, and every job that
+    `needs: [unit-tests]` ran.
+  - Unchanged on purpose: `pre-commit` (3.12-3.14; the owner ruled out a 3.15 pre-commit in phase 1),
+    `requires-python`, the classifiers, the black, mypy and ruff targets, and the Docker base.
+  - `AGENTS.md` (§ CI/CD) and `docs/DEVELOPER_CHEATSHEET.md` (1.1.2) describe the legs.
 - **The publish path asserts that the image serves, and that it is the version it is tagged**
   (`util/check_image_serves.py`, new; `publish-image.yml`). The existing checks cover what the image
   contains and that the application imports. 0.5.0 and 0.6.0 each shipped a package whose

@@ -35,12 +35,21 @@ env:
 
 jobs:
   slow-or-integration-tests:
-    name: Slow / Integration Tests
+    # The name spells out the suffix GitHub appended to the old static name ("Slow / Integration
+    # Tests (3.14)"), so the three existing legs post the same names as before, and the 3.15 leg is
+    # "(3.15)" rather than "(3.15, true)".
+    name: Slow / Integration Tests (${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    # Python 3.15 is INFORMATIONAL (phase 1 of the 3.15 migration, 2026-11-14): its leg reports, but a
+    # failure there fails neither the job nor the run. Same pattern as ci.yml's unit-tests job.
+    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
+        include:
+          - python-version: "3.15"
+            experimental: true
     steps:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

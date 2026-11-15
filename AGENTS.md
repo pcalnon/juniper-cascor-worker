@@ -6,7 +6,7 @@
 **License**: MIT License
 **Version**: 0.6.1
 **Python**: >=3.11 (supports 3.11, 3.12, 3.13, 3.14)
-**Last Updated**: 2026-10-26
+**Last Updated**: 2026-11-14
 
 ---
 
@@ -245,8 +245,8 @@ Per-suite detail: what each test file covers and the marker it carries. Moved to
 | **pre-commit** | 3.12, 3.13, 3.14 | Run all pre-commit hooks (parallel matrix) |
 | **docs** | 3.14 | Run `juniper-check-doc-links`, workflow path lint, and AGENTS.md lints |
 | **async-route-audit** | 3.14 | Run Ruff ASYNC checks against worker code |
-| **unit-tests** | 3.12, 3.13, 3.14 | Unit tests with aggregate coverage enforcement |
-| **integration-tests** | 3.12, 3.13, 3.14 | Integration-marker test pass (soft-failed by required-checks during shakedown) |
+| **unit-tests** | 3.12, 3.13, 3.14; 3.15 informational (never blocks) | Unit tests with aggregate coverage enforcement |
+| **integration-tests** | 3.12, 3.13, 3.14; 3.15 informational (never blocks) | Integration-marker test pass (soft-failed by required-checks during shakedown) |
 | **build** | 3.14 | Build wheel + sdist, verify package metadata |
 | **dependency-docs** | 3.14 | Generate dependency documentation |
 | **security** | 3.14 | Gitleaks, Bandit SARIF, pip-audit |

@@ -1,7 +1,7 @@
 # Developer Cheatsheet — juniper-cascor-worker
 
-**Version**: 1.1.1
-**Date**: 2026-10-08
+**Version**: 1.1.2
+**Date**: 2026-11-14
 **Project**: juniper-cascor-worker
 
 ---
@@ -244,8 +244,8 @@ Local Claude Code session rules (thread handoff, worktrees) live in `AGENTS.md`.
 
 1. `pre-commit` on Python 3.12, 3.13, and 3.14.
 2. `docs`, which installs `juniper-doc-tools` / `juniper-ci-tools`, runs `juniper-check-doc-links` with the excludes in `ci.yml` and `--cross-repo skip`, lints workflow script paths, and checks AGENTS.md metadata.
-3. `unit-tests` on Linux for Python 3.12, 3.13, and 3.14 plus macOS Python 3.12.
-4. `integration-tests` on Python 3.12, 3.13, and 3.14. Failures are reported as warnings during the shakedown cycle.
+3. `unit-tests` on Linux for Python 3.12, 3.13, and 3.14 plus macOS Python 3.12, and an informational Linux Python 3.15 leg whose failure blocks nothing (phase 1 of the Python 3.15 migration).
+4. `integration-tests` on Python 3.12, 3.13, and 3.14, plus an informational Python 3.15 leg whose failure blocks nothing. Failures are reported as warnings during the shakedown cycle.
 5. `build`, which builds wheel and sdist artifacts and runs `twine check`.
 6. `dependency-docs`, which runs `juniper-generate-dep-docs` and uploads generated dependency files.
 7. `security`, which runs Gitleaks, Bandit SARIF upload, and `pip-audit`.

@@ -227,14 +227,26 @@ jobs:
   unit-tests:
     name: Unit Tests + Coverage (Python ${{ matrix.python-version }} on ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # METRICS-MON R3.7 / seed-(R1.3 design): macOS leg runs in
-    # continue-on-error mode for the initial 2-week soak (started
-    # 2026-04-30). The Linux legs remain required; the macOS leg
-    # surfaces platform-divergence failures (cross-platform rss_mb
-    # sampling, POSIX-only assumptions) without blocking PRs while
-    # we identify environment-specific issues. After the soak, flip
-    # the include block's ``experimental`` flag to false to make
-    # the macOS leg required.
+    # METRICS-MON R3.7 / seed-(R1.3 design): the macOS leg ran in
+    # continue-on-error mode for a 2-week soak (started 2026-04-30)
+    # that surfaced platform-divergence failures (cross-platform
+    # rss_mb sampling, POSIX-only assumptions) without blocking PRs.
+    # juniper-cascor-worker#40 ended the soak on 2026-05-01 by setting
+    # the include block's ``experimental`` flag to false, so a failing
+    # macOS leg fails the job; ruleset 14250447 requires its context
+    # with the three 3.12-3.14 Linux contexts.
+    #
+    # The Python 3.15 leg is INFORMATIONAL: phase 1 of the ecosystem's
+    # 3.15 migration (owner request, 2026-11-14) runs it so its results
+    # show, but it must block no merge. It is the only leg with
+    # ``experimental: true``, so this expression is true on it alone: a
+    # failure there leaves the job's result, which the Quality Gate
+    # reads as `needs.unit-tests.result`, unchanged, and `build`
+    # (`needs: [unit-tests]`) still runs. Measured on juniper-data#538
+    # (run 43655144734): with the 3.15 leg failed on purpose, that gate
+    # printed "Unit Tests: success" and its dependent jobs ran. Its
+    # context is in no ruleset. Keep both until the owner makes 3.15 a
+    # required version (phase 3 of the migration).
     continue-on-error: ${{ matrix.experimental == true }}
     needs: [pre-commit]
     strategy:
@@ -246,6 +258,10 @@ jobs:
           - os: macos-latest
             python-version: "3.12"
             experimental: false
+          # Informational, never required: see the comment above `continue-on-error`.
+          - os: ubuntu-latest
+            python-version: "3.15"
+            experimental: true
 
     steps:
       - name: Checkout Code
@@ -364,11 +380,23 @@ jobs:
   integration-tests:
     name: Integration Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    # The Python 3.15 leg is INFORMATIONAL, as in unit-tests above: it is
+    # the only leg with ``experimental: true``, so this expression is true
+    # on it alone, and a failure there leaves the job's result, which the
+    # Quality Gate reads as `needs.integration-tests.result`, unchanged.
+    # Ruleset 14250447 requires "Integration Tests (Python 3.12)",
+    # "(Python 3.13)" and "(Python 3.14)", never "(Python 3.15)". Keep it
+    # until the owner makes 3.15 a required version.
+    continue-on-error: ${{ matrix.experimental == true }}
     needs: [pre-commit]
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
+        include:
+          # Informational, never required: see the comment above `continue-on-error`.
+          - python-version: "3.15"
+            experimental: true
 
     steps:
       - name: Checkout Code
