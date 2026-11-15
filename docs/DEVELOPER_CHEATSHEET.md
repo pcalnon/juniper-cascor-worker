@@ -1,6 +1,6 @@
 # Developer Cheatsheet — juniper-cascor-worker
 
-**Version**: 1.1.3
+**Version**: 1.1.4
 **Date**: 2026-11-15
 **Project**: juniper-cascor-worker
 
@@ -248,10 +248,28 @@ WorkerError (base)
 |----------|---------|---------|
 | `.github/workflows/ci.yml` | Pushes, pull requests, manual dispatch | Required CI quality gate |
 | `.github/workflows/security-scan.yml` | Weekly Monday schedule, manual dispatch | Scheduled Bandit and `pip-audit` scan |
-| `.github/workflows/publish.yml` | Published GitHub releases | Build, publish to TestPyPI, verify install, then publish to PyPI |
+| `.github/workflows/publish.yml` | Published GitHub releases (`v*` tags); `workflow_dispatch` from a release tag (republish only) | Build once, publish that one artifact to TestPyPI, check it by sha256 against TestPyPI's JSON, verify the install, then publish it to PyPI. See [Publishing and Recovery](#publishing-and-recovery) |
 | `.github/workflows/claude.yml` | Issue comments, PR review comments, submitted reviews, and issues opened or assigned, when the new text contains `@claude` | GitHub assistant. Contract: [Claude Code workflow](#claude-code-workflow) |
 
 Workflow actions are SHA-pinned with adjacent version comments. For GitHub Actions Dependabot PRs, expect the `uses:` SHA and version comment to move together.
+
+### Publishing and Recovery
+
+`publish.yml` builds once and hands both publish jobs one artifact:
+
+1. `Build and Validate` builds the sdist and wheel (`python -m build`, `twine check`), records their sha256 in `SHA256SUMS` and uploads both as one artifact, `juniper-cascor-worker-dist`, kept 90 days; a re-run attempt reuses that artifact instead of building again. It runs for a published `v*` Release only
+2. `Publish to TestPyPI` checks the files against `SHA256SUMS`, uploads them, requires TestPyPI's JSON to list exactly those sha256, then verifies the install (`--no-deps`, TestPyPI index only)
+3. `Publish to PyPI`, behind the `pypi` approval, checks the same files against `SHA256SUMS` and TestPyPI's JSON again, uploads them (trusted publishing / OIDC), then checks PyPI's JSON. Only the jobs that upload hold `id-token: write`
+
+The steps marked `One-artifact publish template`, and the `republish` job, are verbatim copies of juniper-cascor's `publish.yml` (juniper-cascor#763, #767); `tests/test_publish_one_artifact.py` pins them to its sha256, so change them there first. The contract: juniper-cascor's [`docs/ci_cd/MANUAL.md` § One Artifact, Checked Against TestPyPI](https://github.com/pcalnon/juniper-cascor/blob/main/docs/ci_cd/MANUAL.md#one-artifact-checked-against-testpypi).
+
+**A release that did not reach PyPI**: the owner's recovery ladder (ruling of 2026-11-15), in this order ([§ Recovering a Release That Did Not Reach PyPI](https://github.com/pcalnon/juniper-cascor/blob/main/docs/ci_cd/MANUAL.md#recovering-a-release-that-did-not-reach-pypi)):
+
+1. **Republish TestPyPI's files**: `gh workflow run publish.yml --repo pcalnon/juniper-cascor-worker --ref v<version> -f republish_from_testpypi=true`. Only `Republish the tested files (dispatch only)` runs, behind the `pypi` gate; it builds nothing, and only a tag cut after this job landed carries it.
+2. **If that fails, within 30 days of the release run**: **Re-run failed jobs** on the release run, which reuses the run's artifact.
+3. **Otherwise**: cut a new patch version.
+
+Never "Re-run all jobs" on a publish run, nor `gh run rerun <id>` without `--failed`. `publish-image.yml` (the GHCR image) fires on the same Release and is not part of this.
 
 ### Claude Code workflow
 
