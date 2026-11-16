@@ -199,12 +199,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Recovery, in the owner's order (ruling of 2026-11-15).** A `workflow_dispatch` from the release tag with
     `republish_from_testpypi` runs only `Republish the tested files (dispatch only)`, behind the same `pypi` gate: it
     copies TestPyPI's files for the version to PyPI, each checked against TestPyPI's JSON and, while it exists, the
-    release run's `SHA256SUMS`, and builds nothing. If that fails, within 30 days of the release run use "Re-run
-    failed jobs" on it; otherwise cut a new patch version. Never "Re-run all jobs". `AGENTS.md` § Publishing states
-    it briefly; `docs/DEVELOPER_CHEATSHEET.md` § Publishing and Recovery carries the ladder and the dispatch command.
+    release run's `SHA256SUMS`, and builds nothing. It copies those files whatever the release run concluded, so it
+    applies only when that run's TestPyPI job succeeded or failed on index lag alone, and only tags after v0.6.1
+    carry it. If that fails, within 30 days of the release run use "Re-run failed jobs" on it; otherwise cut a new
+    patch version, which is also the only fix for a broken package (a TestPyPI job that failed after its upload for
+    a real reason). Never "Re-run all jobs". `AGENTS.md` § Publishing states it briefly;
+    `docs/DEVELOPER_CHEATSHEET.md` § Publishing and Recovery carries the ladder and the dispatch command.
     `publish-image.yml` is unchanged.
-  - Pinned by the new `tests/test_publish_one_artifact.py` (65 cases), ported from juniper-cascor's: the wiring,
-    what this workflow kept, every template block and the republish job byte-identical to juniper-cascor's, and
+  - Pinned by the new `tests/test_publish_one_artifact.py` (69 cases), ported from juniper-cascor's: the wiring,
+    what this workflow kept, each job's exact step list, no `continue-on-error`, the install check's script and the
+    uploads' inputs exactly, every template block and the republish job byte-identical to juniper-cascor's, and
     rehearsals that run each template step's own Python against a stand-in index and GitHub API on 127.0.0.1.
 
 ### Security

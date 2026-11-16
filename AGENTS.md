@@ -6,7 +6,7 @@
 **License**: MIT License
 **Version**: 0.6.1
 **Python**: >=3.11 (supports 3.11, 3.12, 3.13, 3.14)
-**Last Updated**: 2026-11-15
+**Last Updated**: 2026-11-16
 
 ---
 
@@ -262,7 +262,7 @@ Per-suite detail: what each test file covers and the marker it carries. Moved to
 
 **Trigger**: GitHub release (`v*` tags). Publishes to PyPI via trusted publishing (OIDC, no stored credentials).
 It builds **once**, and TestPyPI then PyPI upload that one artifact, each checked by sha256 against TestPyPI's JSON (juniper-cascor's template, pinned by `tests/test_publish_one_artifact.py`).
-A release that did not reach PyPI: dispatch `publish.yml` from its tag with `-f republish_from_testpypi=true`; then **Re-run failed jobs** (within 30 days); then a new patch version; never "Re-run all jobs".
+A release that did not reach PyPI, its TestPyPI job having passed or failed on index lag alone: dispatch `publish.yml` from its tag with `-f republish_from_testpypi=true` (only tags after v0.6.1 carry the job); then **Re-run failed jobs** (within 30 days); then a new patch version, also the only fix for a broken package; never "Re-run all jobs".
 Details: [`docs/DEVELOPER_CHEATSHEET.md` § Publishing and Recovery](docs/DEVELOPER_CHEATSHEET.md#publishing-and-recovery).
 
 ### Sequence Safety (Required) — `sequence-safety.yml` + `main-verify.yml`
