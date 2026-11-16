@@ -173,6 +173,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     is its mutation check; CI does not call it.
   - `docs/DEVELOPER_CHEATSHEET.md` (1.1.3) gains § Secret scan (Gitleaks). `AGENTS.md` no longer says the weekly
     `security-scan.yml` runs Gitleaks, at 08:00: it runs Bandit and pip-audit, on Mondays at 06:00 UTC.
+- **PyPI now receives the files TestPyPI took: `publish.yml` builds once, and the run checks every upload by sha256
+  against TestPyPI** (the owner's directive of 2026-11-15: "deploy to pypi should send the same artifact that was
+  already sent to testpypi. an identical hash check, of the artifacts after testpypi deploy and prior to pypi deploy,
+  might also be helpful here to prevent this from slipping through the cracks again."). `publish.yml` ran
+  `python -m build` in its TestPyPI job and again in its PyPI job, so PyPI served a second build of every release:
+  0.6.1's wheel is `1b5b7fc0…` on PyPI and `c4bfce97…` on TestPyPI, and its sdist `c69d9439…` against `b2d2a3cb…`;
+  0.6.0's files differ the same way. This ports juniper-cascor's fix (juniper-cascor#763, #767), template verbatim.
+  - **Build once.** A new `build` job, `Build and Validate`, runs the same commands once (`pip install build twine`,
+    `python -m build`, `twine check dist/*`, Python 3.12), records the files' sha256 in `SHA256SUMS` and uploads
+    `dist/` and `SHA256SUMS` as one artifact, `juniper-cascor-worker-dist`, kept 90 days so it outlives the `pypi`
+    gate (at most 30 days) and the 30-day re-run window. On a re-run attempt its first step,
+    `Reuse an earlier attempt's artifact`, finds that artifact and skips the rest of the job. It carries the guard
+    `startsWith(github.event.release.tag_name, 'v')`; every release of this repository is tagged `v<version>`.
+  - **TestPyPI.** `Publish to TestPyPI` downloads the artifact, checks it against `SHA256SUMS`, uploads it, and
+    requires TestPyPI's JSON for the version to list exactly those files with those sha256 (polled up to 20 times,
+    15 s apart, for CDN lag; another sha256 fails at once). Its checkout, setup-python and install check stay; the
+    install check now quotes its requirement, which clears actionlint's SC2086 (info) there.
+  - **PyPI.** `Publish to PyPI` keeps its `pypi` environment and gate, no longer checks out or builds anything, and
+    uploads the same artifact after checking it against `SHA256SUMS` and TestPyPI's JSON again; PyPI's JSON is
+    checked after the upload.
+  - **Only the jobs that upload hold `id-token: write`.** The workflow's `permissions` is `{}`: `Build and Validate`
+    gets `contents: read` and `actions: read`, `Publish to TestPyPI` `contents: read` and `id-token: write`, and
+    `Publish to PyPI` `id-token: write`.
+  - **Recovery, in the owner's order (ruling of 2026-11-15).** A `workflow_dispatch` from the release tag with
+    `republish_from_testpypi` runs only `Republish the tested files (dispatch only)`, behind the same `pypi` gate: it
+    copies TestPyPI's files for the version to PyPI, each checked against TestPyPI's JSON and, while it exists, the
+    release run's `SHA256SUMS`, and builds nothing. It copies those files whatever the release run concluded, so it
+    applies only when that run's TestPyPI job succeeded or failed on index lag alone, and only tags after v0.6.1
+    carry it. If that fails, within 30 days of the release run use "Re-run failed jobs" on it; otherwise cut a new
+    patch version, which is also the only fix for a broken package (a TestPyPI job that failed after its upload for
+    a real reason). Never "Re-run all jobs". `AGENTS.md` § Publishing states it briefly;
+    `docs/DEVELOPER_CHEATSHEET.md` § Publishing and Recovery carries the ladder and the dispatch command.
+    `publish-image.yml` is unchanged.
+  - Pinned by the new `tests/test_publish_one_artifact.py` (69 cases), ported from juniper-cascor's: the wiring,
+    what this workflow kept, each job's exact step list, no `continue-on-error`, the install check's script and the
+    uploads' inputs exactly, every template block and the republish job byte-identical to juniper-cascor's, and
+    rehearsals that run each template step's own Python against a stand-in index and GitHub API on 127.0.0.1.
 
 ### Security
 
