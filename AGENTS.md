@@ -172,7 +172,7 @@ This is an ecosystem-wide rule restated in the parent `Juniper/AGENTS.md` "Cross
 ### Temporary files: `tmp/`, never `/tmp` (mandatory)
 
 **No file is ever written under `/tmp`** (nor `/var/tmp`) by this repo's scripts, tests, tools, services, sessions
-or agents (owner directive, 2026-10-26). On the Linux host `/tmp` is a tmpfs that `systemd-tmpfiles-clean` ages
+or agents (Overtoad directive, 2026-10-26). On the Linux host `/tmp` is a tmpfs that `systemd-tmpfiles-clean` ages
 daily (`q /tmp 1777 root root 10d`): a file untouched for ten days is deleted while still in use, and a reboot
 erases the rest. In the week to 2026-10-26 it emptied a live test stack's pid files and venv three times. macOS
 ages `/tmp` too.
