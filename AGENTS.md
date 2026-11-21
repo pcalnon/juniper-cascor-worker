@@ -186,7 +186,7 @@ ages `/tmp` too.
   derived from `TMPDIR`.
 - Out of scope: GitHub-hosted CI runners and a container's own `/tmp`.
 - Ecosystem rule and rationale: `juniper-ml/notes/JUNIPER_2026-10-26_JUNIPER-ECOSYSTEM_REPO-TMP-DIRECTORY-CONVENTION.md`.
-- **Owner rulings, 2026-10-26** (canonical: the note above): `juniper-check-doc-links` passes `--exclude tmp` and a
+- **The Overtoad rulings, 2026-10-26** (canonical: the note above): `juniper-check-doc-links` passes `--exclude tmp` and a
   local Docker build's `.dockerignore` lists `tmp/`; pytest does not ignore it (no `norecursedirs`, `--ignore` or
   `collect_ignore` names it). Full-tree repo copies and log-file copies may live there.
   - A script that counts matches with `grep` or `find` chooses its scope deliberately: the repo with its `tmp/`
@@ -271,7 +271,7 @@ Two workflows fanned out from the juniper-ml sequence-safety rollout (Wave-2). B
 
 | Workflow | Trigger | Role |
 |----------|---------|------|
-| `sequence-safety.yml` | `pull_request` (main/develop) | Per-PR **required** check `Sequence Safety`: screens base..HEAD and uploads the `sequence-safety-report` artifact. Owner labels `allow-symbol-loss` / `docs-rewrite` demote a FAIL to WARN-only (`--advisory`, exit 0), which greens the check for that PR; the `Allow-Symbol-Loss:` / `Allow-Docs-Rewrite:` commit trailers are the primary waivers. |
+| `sequence-safety.yml` | `pull_request` (main/develop) | Per-PR **required** check `Sequence Safety`: screens base..HEAD and uploads the `sequence-safety-report` artifact. The Overtoad labels `allow-symbol-loss` / `docs-rewrite` demote a FAIL to WARN-only (`--advisory`, exit 0), which greens the check for that PR; the `Allow-Symbol-Loss:` / `Allow-Docs-Rewrite:` commit trailers are the primary waivers. |
 | `main-verify.yml` | `push` (main) + dispatch | Post-merge, bypass-proof net: per-SHA and no-cancel so every merge is screened, catch-up base sweeps `[skip ci]` windows, and a failure upserts one stable-title tracking issue per red streak. Screens-only — the regression battery is deferred. |
 
 Symbol scope is `juniper_cascor_worker/**/*.py` + `tests/**/*.py` (the worker's Python surface); the docs screen uses the universal default (`AGENTS.md` + `docs/**/*.md` + `notes/**/*.md`).
