@@ -626,7 +626,7 @@ git worktree prune
 
 ## Key Files Reference
 
-Relocated verbatim from `AGENTS.md` § Quick Reference → Key Files (2026-10-26, to keep the always-loaded file under its memory budget when the owner's revised `tmp/` counting ruling landed) so it is read on demand rather than loaded into every session.
+Relocated verbatim from `AGENTS.md` § Quick Reference → Key Files (2026-10-26, to keep the always-loaded file under its memory budget when the Overtoad's revised `tmp/` counting ruling landed) so it is read on demand rather than loaded into every session.
 
 | File | Purpose |
 |------|---------|
