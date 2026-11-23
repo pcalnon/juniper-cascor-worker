@@ -19,7 +19,7 @@
 #    so it fires no matter who merged or what they bypassed -- the bypass-proof
 #    compositional-loss net the per-PR screen (sequence-safety.yml) cannot
 #    guarantee. That screen's `Sequence Safety` context IS a required check in the branch
-#    ruleset, but a ruleset bypass actor can still merge over a red run, and an owner label
+#    ruleset, but a ruleset bypass actor can still merge over a red run, and an Overtoad label
 #    (`allow-symbol-loss` / `docs-rewrite`) greens it for one PR; this net honours only the
 #    `Allow-Symbol-Loss:` / `Allow-Docs-Rewrite:` commit trailers. It runs on push to main,
 #    so it is not a PR status check and blocks no merge -- it reports after one.
@@ -52,7 +52,7 @@
 #        ONE open issue per red streak; each subsequent failing SHA COMMENTS on it. Dedup
 #        binds to the workflow's OWN authorship (creator=github-actions[bot] + exact title
 #        + .pull_request == null), never title alone -- a forgeable public title is not a
-#        trust boundary. NOT auto-closed on green (the owner closes it after adjudication).
+#        trust boundary. NOT auto-closed on green (the Overtoad closes it after adjudication).
 #
 #    v1 DEFERRALS (adaptation notes, distinct from the juniper-ml original):
 #      * Battery job DEFERRED: juniper-ml re-runs its full battery post-merge, but the
@@ -325,7 +325,7 @@ jobs:
   # notify (on failure only): a red main-verify must be LOUD. Upserts a STABLE-TITLE dedup tracking
   # issue -- ONE open issue titled "main-verify: post-merge verification failing" per red streak; each
   # subsequent failing SHA COMMENTS on it instead of opening a new issue. NOT auto-closed on green (the
-  # owner closes it after adjudication). Dedup binds to the workflow's own AUTHORSHIP
+  # Overtoad closes it after adjudication). Dedup binds to the workflow's own AUTHORSHIP
   # (creator=github-actions[bot] + exact title + .pull_request == null), never title alone -- a
   # forgeable public title is not a trust boundary (ml#928 review). v1 has no Slack step (the worker has
   # no webhook secret pattern); add one later, mirroring release-train's non-blocking pattern.
@@ -394,10 +394,10 @@ jobs:
               echo "history so it also clears this post-merge net."
               echo ""
               echo "_Auto-filed by .github/workflows/main-verify.yml. One issue per red streak; the"
-              echo "owner closes it after adjudication (NOT auto-closed on green)._"
+              echo "Overtoad closes it after adjudication (NOT auto-closed on green)._"
             } > issue-body.md
             echo "Opening the stable-title tracking issue"
-            # Bot-applied `main-verify` label: ensure it exists (idempotent, never clobbers owner
+            # Bot-applied `main-verify` label: ensure it exists (idempotent, never clobbers Overtoad
             # customization -- no --force), open the issue, then best-effort apply. The label is
             # operator filtering / defense-in-depth, never part of the dedup match above -- but a
             # failed CREATE must still fail this step loudly (the tracker is the point of notify).
