@@ -78,7 +78,7 @@ def _import_cascor_message_type():
 def cascor_message_type():
     enum_cls = _import_cascor_message_type()
     if enum_cls is None:
-        pytest.skip("cascor server source not importable — set CASCOR_SRC_PATH or run " "from a checkout that contains a sibling juniper-cascor/src tree")
+        pytest.skip("cascor server source not importable — set CASCOR_SRC_PATH or run from a checkout that contains a sibling juniper-cascor/src tree")
     return enum_cls
 
 

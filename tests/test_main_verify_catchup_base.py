@@ -177,7 +177,7 @@ class CatchUpBaseRehearsalTest(unittest.TestCase):
             #   * …/runs?status=success…    -> the legacy tier-2 head_sha
             gh = stub_bin / "gh"
             gh.write_text(
-                "#!/usr/bin/env bash\n" "set -euo pipefail\n" 'url=""\n' 'for a in "$@"; do\n' '  case "$a" in repos/*) url="$a" ;; esac\n' "done\n" 'case "$url" in\n' f'  *status=completed*) cat "{runs_file}" ;;\n' "  */jobs)\n" '    rid="${url%/jobs}"; rid="${rid##*/}"\n' f'    awk -v id="$rid" \'$1==id{{print $2}}\' "{verdicts_file}"\n' "    ;;\n" f'  *status=success*) printf "%s\\n" "{last_ok}" ;;\n' "  *) : ;;\n" "esac\n",
+                f'#!/usr/bin/env bash\nset -euo pipefail\nurl=""\nfor a in "$@"; do\n  case "$a" in repos/*) url="$a" ;; esac\ndone\ncase "$url" in\n  *status=completed*) cat "{runs_file}" ;;\n  */jobs)\n    rid="${{url%/jobs}}"; rid="${{rid##*/}}"\n    awk -v id="$rid" \'$1==id{{print $2}}\' "{verdicts_file}"\n    ;;\n  *status=success*) printf "%s\\n" "{last_ok}" ;;\n  *) : ;;\nesac\n',
                 encoding="utf-8",
             )
             gh.chmod(0o755)
