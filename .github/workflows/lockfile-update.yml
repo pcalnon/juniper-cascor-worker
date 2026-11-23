@@ -34,7 +34,7 @@
 #    Dependabot secret store, so the repo-scoped CROSS_REPO_DISPATCH_TOKEN is
 #    EMPTY there and the checkout hard-fails on every dependabot/pip/** push.
 #    The token-availability gate below turns that arm into a loud green no-op
-#    until the owner registers the same PAT under Settings -> Secrets ->
+#    until the Overtoad registers the same PAT under Settings -> Secrets ->
 #    Dependabot. Mirrors juniper-canopy #476 / juniper-cascor #428 /
 #    juniper-data #246.
 #    See juniper-ml/notes/JUNIPER_2026-05-02_JUNIPER-ECOSYSTEM_V17-V18-CROSS-REPO-DISPATCH-TOKEN-SETUP.md
