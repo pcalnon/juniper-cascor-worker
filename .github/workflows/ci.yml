@@ -715,7 +715,7 @@ jobs:
 
       - name: Run Gitleaks over the pull request (Secrets Detection)
         # gitleaks-action v3.0.0 lists a pull request's commits with ONE
-        # unpaginated call, GET /repos/{Overtoad}/{repo}/pulls/{n}/commits (30
+        # unpaginated call, GET /repos/{owner}/{repo}/pulls/{n}/commits (30
         # per page by default, oldest first), and scans
         # `--no-merges --first-parent <first>^..<last>` across that page
         # (src/gitleaks.js at the pinned SHA). Commit 31 onwards is never

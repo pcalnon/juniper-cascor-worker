@@ -81,7 +81,7 @@ DIGEST_CHECK = 'echo "${GITLEAKS_SHA256}  ${RUNNER_TEMP}/${asset}" | sha256sum -
 ENGINE_LINUX_X64_SHA256 = "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c"
 #: gitleaks-action v3.0.0's own argv (src/gitleaks.js Scan()) with the report under reports/security/; --log-opts follows.
 PR_SCAN_ARGV = ["detect", "--redact", "-v", "--exit-code=2", "--report-format=sarif", "--report-path=reports/security/gitleaks.sarif", "--log-level=debug"]
-#: Where the action's first API page ends: GitHub's default per_page for GET /repos/{Overtoad}/{repo}/pulls/{n}/commits.
+#: Where the action's first API page ends: GitHub's default per_page for GET /repos/{owner}/{repo}/pulls/{n}/commits.
 ACTION_PAGE = 30
 #: The colour codes gitleaks -v may wrap around a finding's lines.
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
