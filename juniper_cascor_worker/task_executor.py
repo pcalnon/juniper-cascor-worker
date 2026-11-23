@@ -43,7 +43,7 @@ def _get_candidate_unit_class() -> Any:
     try:
         from candidate_unit.candidate_unit import CandidateUnit
     except ImportError as exc:
-        raise ImportError("CandidateUnit is not importable -- the 'juniper-cascor-model' dependency is missing " "or broken (it provides the top-level 'candidate_unit' package). Install or repair " f"juniper-cascor-model. Original error: {exc}") from exc
+        raise ImportError(f"CandidateUnit is not importable -- the 'juniper-cascor-model' dependency is missing or broken (it provides the top-level 'candidate_unit' package). Install or repair juniper-cascor-model. Original error: {exc}") from exc
     return CandidateUnit
 
 
