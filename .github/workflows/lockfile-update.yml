@@ -5,10 +5,10 @@
 # Application:   juniper_cascor_worker
 # File Name:     lockfile-update.yml
 # Author:        Paul Calnon
-# Version:       0.1.0
+# Version:       0.1.1
 #
 # Date Created:  2026-05-02
-# Last Modified: 2026-09-23
+# Last Modified: 2026-11-24
 #
 # License:       MIT License
 # Copyright:     Copyright (c) 2024-2026 Paul Calnon
@@ -270,11 +270,43 @@ jobs:
                                           {path: "requirements-cpu.lock", contents: $cpu_contents}]}
               }}}' > /tmp/lockfile-commit.json
 
-          gh api graphql --input /tmp/lockfile-commit.json > /tmp/lockfile-commit-result.json
+          # `gh api graphql` exits 1, not 0, on a response that carries GraphQL `errors`: it
+          # writes the response to stdout, prints `gh: <message>` to stderr and returns a
+          # silent error (cli/cli pkg/cmd/api/api.go, processResponse). An HTTP failure exits
+          # 1 the same way (`gh: HTTP 502`, `gh: Bad credentials (HTTP 401)`). Called bare,
+          # `set -e` ended the step on that exit, before the `.errors` check below could print
+          # its diagnostic. Capture the exit status and stderr instead; the checks decide.
+          # The same fix as juniper-canopy#814.
+          GH_STATUS=0
+          GH_STDERR=$({ gh api graphql --input /tmp/lockfile-commit.json > /tmp/lockfile-commit-result.json; } 2>&1) || GH_STATUS=$?
 
-          if jq -e '.errors' /tmp/lockfile-commit-result.json > /dev/null; then
+          # Print what gh printed, as the bare call did, with the token's value masked. The
+          # substitution runs in the shell, so the token never reaches a command line.
+          redact() {
+            printf '%s\n' "${1//"${GH_TOKEN:-}"/***}"
+          }
+          if [ -n "${GH_STDERR}" ]; then
+            redact "${GH_STDERR}" >&2
+          fi
+
+          if jq -e '.errors' /tmp/lockfile-commit-result.json > /dev/null 2>&1; then
             echo "::error::createCommitOnBranch failed — lockfiles NOT committed:"
-            jq '.errors' /tmp/lockfile-commit-result.json
+            redact "$(jq '.errors' /tmp/lockfile-commit-result.json)"
+            echo "gh exited ${GH_STATUS}. Fix the cause above and re-run this job. It checks out the branch's current tip, so a branch that moved after checkout (an expectedHeadOid mismatch) needs only the re-run."
+            exit 1
+          fi
+
+          if [ "${GH_STATUS}" -ne 0 ]; then
+            echo "::error::gh api graphql failed (exit ${GH_STATUS}) with no GraphQL errors in the response, so this log cannot show whether the lock commit landed."
+            if jq -e . /tmp/lockfile-commit-result.json > /dev/null 2>&1; then
+              redact "$(jq . /tmp/lockfile-commit-result.json)"
+            else
+              echo "The response body is empty or not JSON; gh's message above is the error."
+            fi
+            echo "Check ${BRANCH} for the lock commit before re-running this job."
+            if [[ "${GH_STDERR}" == *"(HTTP 401)"* ]]; then
+              echo "HTTP 401: CROSS_REPO_DISPATCH_TOKEN is invalid or expired."
+            fi
             exit 1
           fi
 
