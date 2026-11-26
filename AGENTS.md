@@ -6,7 +6,7 @@
 **License**: MIT License
 **Version**: 0.6.1
 **Python**: >=3.11 (supports 3.11, 3.12, 3.13, 3.14)
-**Last Updated**: 2026-11-23
+**Last Updated**: 2026-11-26
 
 ---
 
@@ -261,8 +261,8 @@ Per-suite detail: what each test file covers and the marker it carries. Moved to
 ### Publishing (`.github/workflows/publish.yml`)
 
 **Trigger**: GitHub release (`v*` tags). Publishes to PyPI via trusted publishing (OIDC, no stored credentials).
-It builds **once**, and TestPyPI then PyPI upload that one artifact, each checked by sha256 against TestPyPI's JSON (juniper-cascor's template, pinned by `tests/test_publish_one_artifact.py`).
-A release that did not reach PyPI, its TestPyPI job having passed or failed on index lag alone: dispatch `publish.yml` from its tag with `-f republish_from_testpypi=true` (only tags after v0.6.1 carry the job); then **Re-run failed jobs** (within 30 days); then a new patch version, also the only fix for a broken package; never "Re-run all jobs".
+It builds **once**, and TestPyPI then PyPI upload that one artifact, each checked by sha256 against TestPyPI's JSON (juniper-cascor's template, pinned by `tests/test_publish_one_artifact.py`); the install check runs in a job of its own, `Verify the TestPyPI install`, which cannot mint a credential, and PyPI's job needs it.
+A release that did not reach PyPI: dispatch `publish.yml` from its tag with `-f republish_from_testpypi=true` (only tags after v0.6.1 carry the job; it refuses unless the tag's newest release run passed both TestPyPI jobs); then **Re-run failed jobs** (within 30 days; also the fix for a TestPyPI job that failed on index lag); then a new patch version, the only fix for a real install-check failure; never "Re-run all jobs".
 Details: [`docs/DEVELOPER_CHEATSHEET.md` § Publishing and Recovery](docs/DEVELOPER_CHEATSHEET.md#publishing-and-recovery).
 
 ### Sequence Safety (Required) — `sequence-safety.yml` + `main-verify.yml`
