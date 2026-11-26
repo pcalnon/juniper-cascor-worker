@@ -1,7 +1,7 @@
 # Developer Cheatsheet — juniper-cascor-worker
 
-**Version**: 1.1.4
-**Date**: 2026-11-16
+**Version**: 1.1.5
+**Date**: 2026-11-26
 **Project**: juniper-cascor-worker
 
 ---
@@ -248,7 +248,7 @@ WorkerError (base)
 |----------|---------|---------|
 | `.github/workflows/ci.yml` | Pushes, pull requests, manual dispatch | Required CI quality gate |
 | `.github/workflows/security-scan.yml` | Weekly Monday schedule, manual dispatch | Scheduled Bandit and `pip-audit` scan |
-| `.github/workflows/publish.yml` | Published GitHub releases (`v*` tags); `workflow_dispatch` from a release tag (republish only) | Build once, publish that one artifact to TestPyPI, check it by sha256 against TestPyPI's JSON, verify the install, then publish it to PyPI. See [Publishing and Recovery](#publishing-and-recovery) |
+| `.github/workflows/publish.yml` | Published GitHub releases (`v*` tags); `workflow_dispatch` from a release tag (republish only) | Build once, publish that one artifact to TestPyPI, check it by sha256 against TestPyPI's JSON, verify the install in a job that cannot mint a credential, then publish it to PyPI. See [Publishing and Recovery](#publishing-and-recovery) |
 | `.github/workflows/claude.yml` | Issue comments, PR review comments, submitted reviews, and issues opened or assigned, when the new text contains `@claude` | GitHub assistant. Contract: [Claude Code workflow](#claude-code-workflow) |
 
 Workflow actions are SHA-pinned with adjacent version comments. For GitHub Actions Dependabot PRs, expect the `uses:` SHA and version comment to move together.
@@ -258,19 +258,30 @@ Workflow actions are SHA-pinned with adjacent version comments. For GitHub Actio
 `publish.yml` builds once and hands both publish jobs one artifact:
 
 1. `Build and Validate` builds the sdist and wheel (`python -m build`, `twine check`), records their sha256 in `SHA256SUMS` and uploads both as one artifact, `juniper-cascor-worker-dist`, kept 90 days; a re-run attempt reuses that artifact instead of building again. It runs for a published `v*` Release only
-2. `Publish to TestPyPI` checks the files against `SHA256SUMS`, uploads them, requires TestPyPI's JSON to list exactly those sha256, then verifies the install (`--no-deps`, TestPyPI index only)
-3. `Publish to PyPI`, behind the `pypi` approval, checks the same files against `SHA256SUMS` and TestPyPI's JSON again, uploads them (trusted publishing / OIDC), then checks PyPI's JSON. Only the jobs that upload hold `id-token: write`
+2. `Publish to TestPyPI` checks the files against `SHA256SUMS`, uploads them and requires TestPyPI's JSON to list exactly those sha256. It holds `id-token: write` alone and runs nothing else: no checkout, no install
+3. `Verify the TestPyPI install`, a job of its own that needs it and holds `contents: read` alone, so nothing in it can mint a credential (ruling 2 of 2026-11-16), installs the version from TestPyPI alone, `--no-deps`, and checks its metadata and that the wheel holds the `juniper_cascor_worker` package, every command run from `$RUNNER_TEMP`, outside any checkout
+4. `Publish to PyPI` needs both TestPyPI jobs and waits behind the `pypi` approval. It checks the same files against `SHA256SUMS` and TestPyPI's JSON again, uploads them (trusted publishing / OIDC), then checks PyPI's JSON. Only the jobs that upload hold `id-token: write`
 
-The steps marked `One-artifact publish template`, and the `republish` job, are verbatim copies of juniper-cascor's `publish.yml` (juniper-cascor#763, #767); `tests/test_publish_one_artifact.py` pins them to its sha256, so change them there first. The contract: juniper-cascor's [`docs/ci_cd/MANUAL.md` § One Artifact, Checked Against TestPyPI](https://github.com/pcalnon/juniper-cascor/blob/main/docs/ci_cd/MANUAL.md#one-artifact-checked-against-testpypi).
+The steps marked `One-artifact publish template`, and the `republish` job, are verbatim copies of juniper-cascor's `publish.yml` (juniper-cascor#763, #767, #777). They read only the workflow `env` values `PUBLISH_PACKAGE`, `PUBLISH_DIST_DIR` and `PUBLISH_TAG_PREFIX`, which is `v` here: this package's release tags are `v<version>`, and the build job's guard repeats the prefix, since a job-level `if:` cannot read `env`. `tests/test_publish_one_artifact.py` pins each copy to juniper-cascor's sha256, taken with every `uses:` line reduced to its action's name, so change them there first. The contract: juniper-cascor's [`docs/ci_cd/MANUAL.md` § One Artifact, Checked Against TestPyPI](https://github.com/pcalnon/juniper-cascor/blob/main/docs/ci_cd/MANUAL.md#one-artifact-checked-against-testpypi).
 
-**A release that did not reach PyPI**: the Overtoad's recovery ladder (ruling of 2026-11-15), in this order ([§ Recovering a Release That Did Not Reach PyPI](https://github.com/pcalnon/juniper-cascor/blob/main/docs/ci_cd/MANUAL.md#recovering-a-release-that-did-not-reach-pypi)):
+**A release that did not reach PyPI**: the recovery ladder (ruling of 2026-11-15), in this order ([§ Recovering a Release That Did Not Reach PyPI](https://github.com/pcalnon/juniper-cascor/blob/main/docs/ci_cd/MANUAL.md#recovering-a-release-that-did-not-reach-pypi)):
 
-1. **Republish TestPyPI's files**: `gh workflow run publish.yml --repo pcalnon/juniper-cascor-worker --ref v<version> -f republish_from_testpypi=true`. Only `Republish the tested files (dispatch only)` runs, behind the `pypi` gate; it builds nothing, and only a tag cut after this job landed carries it.
-   It copies TestPyPI's files whatever the release run's jobs concluded, so use it only when that run's `Publish to TestPyPI` succeeded, or failed on index lag alone (a JSON check or the install check that gave up waiting).
+1. **Republish TestPyPI's files**: `gh workflow run publish.yml --repo pcalnon/juniper-cascor-worker --ref v<version> -f republish_from_testpypi=true`. Only `Republish the tested files (dispatch only)` runs, behind the `pypi` gate; it builds nothing.
+   It refuses (ruling 1 of 2026-11-16) unless the tag's newest release run exists and both its TestPyPI jobs, `Publish to TestPyPI` and `Verify the TestPyPI install`, concluded success in their latest attempt. It reads the version from the tag, so a tag that is not `v` followed by the exact version cannot be republished: the job fails without publishing.
 2. **If that fails, within 30 days of the release run**: **Re-run failed jobs** on the release run, which reuses the run's artifact.
 3. **Otherwise**: cut a new patch version.
 
-A broken package is neither case: when `Publish to TestPyPI` failed after its upload for a real reason (the install check refused the package, say for its `Requires-Python`), TestPyPI already holds those files, and neither rung 1 nor "Re-run failed jobs" can change them, so cut a new patch version.
+When rung 1 refuses, or the release run failed before PyPI:
+
+- **A TestPyPI job failed on index lag** (a JSON check, or the install check, gave up waiting for the index, and its error says so): **Re-run failed jobs** on the release run, within 30 days. A re-run `Publish to TestPyPI` uploads the same bytes from the run's artifact, which the index accepts (HTTP 200 for a byte-identical file), and repeats its check; the install check then runs again.
+- **The install check failed for real** (the package does not install or its check fails, and a re-run fails the same way): cut a new patch version. If unsure, re-run the failed jobs first: index lag passes on a re-run, and a real failure repeats. A same-version re-cut cannot fix it, since the index refuses new bytes under a file name it already holds. Never delete and publish a Release again to retry: a re-cut's run becomes the tag's newest release run, TestPyPI refuses its files, and rung 1 then refuses the tag.
+
+A failed `Verify PyPI serves exactly these files` is not in that list: the step runs after the upload, so this run's files are already on PyPI. It has two causes, and they need different fixes:
+
+- **A mismatch** (PyPI lists a file this run did not build, or another sha256): find which upload put it there. Only a new patch version ships tested files under a clean version.
+- **The check gave up waiting** (PyPI's JSON did not list the files in time: index lag): **Re-run failed jobs** on the run whose check gave up (the release run, or the republish's dispatch run), within 30 days of that run. The re-run job uploads the same bytes again, which the index accepts, and repeats the check; it waits at the `pypi` gate again, for a fresh approval.
+
+Each rung acts on the workflow as of the tag: a tag cut before juniper-cascor-worker#232 (v0.6.1 and every earlier tag) has no rung 1, and one cut after it but before the port of juniper-cascor#777 runs rung 1 without the check of the release run's TestPyPI jobs.
 Never "Re-run all jobs" on a publish run, nor `gh run rerun <id>` without `--failed`. `publish-image.yml` (the GHCR image) fires on the same Release and is not part of this.
 
 ### Claude Code workflow

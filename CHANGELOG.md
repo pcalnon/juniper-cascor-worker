@@ -226,6 +226,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     what this workflow kept, each job's exact step list, no `continue-on-error`, the install check's script and the
     uploads' inputs exactly, every template block and the republish job byte-identical to juniper-cascor's, and
     rehearsals that run each template step's own Python against a stand-in index and GitHub API on 127.0.0.1.
+- **The republish job copies nothing a release run did not pass, and the install check can mint no credential**
+  (rulings 1 and 2 of 2026-11-16; the port of juniper-cascor#777, the one-artifact template's sweep, to the entry
+  above, template verbatim).
+  - **The install check has a job of its own** (ruling 2). `Verify the TestPyPI install` needs `Publish to TestPyPI`,
+    and `Publish to PyPI` needs both. It installs the package TestPyPI serves, so it holds `contents: read` alone: no
+    environment and no `id-token`. Until now the check ran in the TestPyPI job, so pip and the check ran with that
+    job's OIDC token-request variables in their environment (the check read only the package's metadata). It keeps
+    its `setup-python` (3.12), its `--no-deps` install from TestPyPI alone and its metadata check, now run from
+    `$RUNNER_TEMP`; it reads the release's tag through the step's `env`, never pasted into the script by an
+    expression, and it checks nothing out. `Publish to TestPyPI` drops its checkout and `setup-python` and holds
+    `id-token: write` alone, so the job that can mint runs only the template steps and the upload. The new job's name
+    holds "TestPyPI", so juniper-ml's release-train ceremony reads its failure as `HALT_TESTPYPI`.
+  - **The install retries, then names index lag.** After its 30 s wait it makes the template's 5 tries, 10 s apart,
+    and after the fifth failed install fails with "… is not installable from TestPyPI after 5 tries (index lag?):
+    Re-run failed jobs; a real failure repeats".
+  - **The check finds the package, not only its metadata** (R4-5 of the sweep's review). `importlib.util.find_spec`
+    locates `juniper_cascor_worker` without running it (an import needs the package's runtime dependencies,
+    `juniper-config-tools` and `numpy` among them, absent under `--no-deps`), and the check fails unless it is found
+    with an origin, through `SystemExit`, which `PYTHONOPTIMIZE` keeps where it would strip an `assert`. It prints
+    juniper-cascor's neutral line (`TestPyPI install <version> package at <origin>`), with no "OK" before the check
+    has passed. A wheel that held the metadata alone passed before.
+  - **The republish job refuses unless the tag's release run passed its TestPyPI jobs** (ruling 1).
+    `Find the release run's artifact` takes the tag's newest release run, whether or not its artifact has expired, and
+    refuses unless `Publish to TestPyPI` and `Verify the TestPyPI install` concluded success in their latest attempt
+    (`GET actions/runs/{id}/jobs?filter=all`, each job's record with the highest attempt); it refuses as well when the
+    tag has no release run. Until now it copied TestPyPI's files whatever the release run's jobs concluded.
+  - **`PUBLISH_TAG_PREFIX: v`**, the template's third parameter: the republish job takes the version from a tag only
+    after it, so a `juniper-cascor-worker-v<version>` tag is refused before any request. The build guard repeats the
+    prefix, since a job-level `if:` cannot read `env`, and its comment notes that a future `rc*` or `hf*` tag
+    convention must widen it.
+  - **Comments**, from the template: the republish job's no longer says the ceremony never reads a dispatch run (since
+    juniper-ml#2592 its monitor does), and the PyPI job's says TestPyPI's record witnesses the files the run built,
+    whose wheel the install check installed.
+  - **Docs.** `AGENTS.md` § Publishing and `docs/DEVELOPER_CHEATSHEET.md` (1.1.5) § Publishing and Recovery
+    state the install job and the republish job's gate, and the ladder's new facts: when rung 1 refuses; that a
+    TestPyPI job which failed on index lag is re-run ("Re-run failed jobs" uploads the same bytes, which the index
+    accepts) while a real install-check failure needs a new patch version; that a Release deleted and published again
+    leaves rung 1 refusing the tag; that a failed `Verify PyPI serves exactly these files` comes after the upload, and
+    needs a new patch version when PyPI lists files this run did not build, but "Re-run failed jobs" on the run whose
+    check gave up waiting for the index (the release run, or the republish's dispatch run); and which tags the ladder
+    covers.
+  - **Pins**, in `tests/test_publish_one_artifact.py` (121 cases, 69 before): the new job's name, `needs`,
+    permissions and lack of an environment; the PyPI job needing both TestPyPI jobs; each job's keys, runner and exact
+    steps; no `continue-on-error` and no `if:` beyond the listed ones; no `PIP_*` variable in any `env`; each build
+    step's command; the install step's exact script and commands, run from `$RUNNER_TEMP`; no `skip_existing` and no
+    `attestations: false`; retention of exactly 90 days; the workflow's name ending in "to PyPI"; and the prefix with
+    its guard. The template blocks and the republish job are pinned by the sha256 of each with every `uses:` line
+    reduced to its action's name (SWEEP item 23), so a Dependabot bump of an action needs no re-port, and a new case
+    pins each action to one ref. The rehearsals run the new find step against the stand-in GitHub API (no release run,
+    a failed upload, a failed or unfinished install check, a failed build, a job a re-run carried over, with and without
+    GitHub's copies, a failure a re-run repaired, a "Re-run all jobs" whose second attempt failed, each listing order, a
+    listing over two pages, an older run that passed behind a newer one that failed, and both prefixes), the fetch step
+    against a release run and a TestPyPI that name different files, the install step's own shell against stand-in
+    `pip`, `python` and `sleep`, and its package check against a real interpreter, `PYTHONOPTIMIZE` set or not. Each of
+    59 edits to a copy of the workflow, one at a time, fails the tests.
 
 ### Security
 
