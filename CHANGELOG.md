@@ -264,8 +264,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     TestPyPI job which failed on index lag is re-run ("Re-run failed jobs" uploads the same bytes, which the index
     accepts) while a real install-check failure needs a new patch version; that a Release deleted and published again
     leaves rung 1 refusing the tag; that a failed `Verify PyPI serves exactly these files` comes after the upload, and
-    needs a new patch version when PyPI lists files this run did not build, but "Re-run failed jobs" when the check gave
-    up waiting for the index; and which tags the ladder covers.
+    needs a new patch version when PyPI lists files this run did not build, but "Re-run failed jobs" on the run whose
+    check gave up waiting for the index (the release run, or the republish's dispatch run); and which tags the ladder
+    covers.
   - **Pins**, in `tests/test_publish_one_artifact.py` (121 cases, 69 before): the new job's name, `needs`,
     permissions and lack of an environment; the PyPI job needing both TestPyPI jobs; each job's keys, runner and exact
     steps; no `continue-on-error` and no `if:` beyond the listed ones; no `PIP_*` variable in any `env`; each build

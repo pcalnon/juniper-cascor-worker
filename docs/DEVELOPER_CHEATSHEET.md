@@ -279,7 +279,7 @@ When rung 1 refuses, or the release run failed before PyPI:
 A failed `Verify PyPI serves exactly these files` is not in that list: the step runs after the upload, so this run's files are already on PyPI. It has two causes, and they need different fixes:
 
 - **A mismatch** (PyPI lists a file this run did not build, or another sha256): find which upload put it there. Only a new patch version ships tested files under a clean version.
-- **The check gave up waiting** (PyPI's JSON did not list the files in time: index lag): **Re-run failed jobs** on the release run, within 30 days. The re-run PyPI job uploads the same bytes again, which the index accepts, and repeats the check; it waits at the `pypi` gate again, for a fresh approval.
+- **The check gave up waiting** (PyPI's JSON did not list the files in time: index lag): **Re-run failed jobs** on the run whose check gave up (the release run, or the republish's dispatch run), within 30 days of that run. The re-run job uploads the same bytes again, which the index accepts, and repeats the check; it waits at the `pypi` gate again, for a fresh approval.
 
 Each rung acts on the workflow as of the tag: a tag cut before juniper-cascor-worker#232 (v0.6.1 and every earlier tag) has no rung 1, and one cut after it but before the port of juniper-cascor#777 runs rung 1 without the check of the release run's TestPyPI jobs.
 Never "Re-run all jobs" on a publish run, nor `gh run rerun <id>` without `--failed`. `publish-image.yml` (the GHCR image) fires on the same Release and is not part of this.
